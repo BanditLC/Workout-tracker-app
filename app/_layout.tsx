@@ -31,6 +31,8 @@ export default function RootLayout() {
         <Stack.Screen name="schedule" options={{ headerShown: false }} />
         <Stack.Screen name="prs" options={{ headerShown: false }} />
         <Stack.Screen name="streaks" options={{ headerShown: false }} />
+        <Stack.Screen name="routine/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="memories" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style="light" />
     </ThemeProvider>

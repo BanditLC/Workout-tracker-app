@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Colors } from '@/constants/theme';
 import { WORKOUT_DAYS, ROUTINES, Routine } from '@/constants/mockData';
+import { loadRoutines, loadPoints } from '@/constants/storage';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -186,6 +187,15 @@ function RoutineCard({ routine }: { routine: Routine }) {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const [routines, setRoutines] = useState<Routine[]>(ROUTINES);
+  const [totalPoints, setTotalPoints] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadRoutines().then(setRoutines);
+      loadPoints().then((p) => setTotalPoints(p.totalPoints));
+    }, [])
+  );
 
   const hour = new Date().getHours();
   const greeting =
@@ -249,9 +259,9 @@ export default function HomeScreen() {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statCard}>
-            <Ionicons name="trending-up-outline" size={20} color={Colors.accent} />
-            <Text style={styles.statValue}>+8%</Text>
-            <Text style={styles.statLabel}>Volume</Text>
+            <Ionicons name="star-outline" size={20} color={Colors.accent} />
+            <Text style={styles.statValue}>{totalPoints.toLocaleString()}</Text>
+            <Text style={styles.statLabel}>Points</Text>
           </View>
         </View>
 
@@ -279,7 +289,7 @@ export default function HomeScreen() {
           <TouchableOpacity
             style={styles.createRoutineBtn}
             activeOpacity={0.85}
-            onPress={() => router.push('/routine/new')}
+            onPress={() => router.push({ pathname: '/routine/[id]', params: { id: 'new' } })}
           >
             <Ionicons name="add-circle-outline" size={20} color={Colors.accent} />
             <Text style={styles.createRoutineText}>New Routine</Text>
@@ -288,7 +298,7 @@ export default function HomeScreen() {
 
         {/* Saved routines */}
         <Text style={styles.routinesLabel}>My Routines</Text>
-        {ROUTINES.map((routine) => (
+        {routines.map((routine) => (
           <RoutineCard key={routine.id} routine={routine} />
         ))}
 
@@ -559,101 +569,109 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Today's workout card
-  workoutCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    marginBottom: 20,
-    overflow: 'hidden',
-  },
-  workoutCardHeader: {
+  // Workouts section
+  workoutActionRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    padding: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  workoutTitleBlock: { gap: 4, flex: 1 },
-  workoutName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  workoutTag: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-  },
-  exerciseCountBadge: {
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  exerciseCountText: {
-    fontSize: 11,
-    color: Colors.accent,
-    fontWeight: '600',
-  },
-  exerciseList: {
-    paddingHorizontal: 16,
-  },
-  exerciseRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
     gap: 12,
+    marginBottom: 20,
   },
-  exerciseRowBorder: {
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  exerciseIndex: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
-    backgroundColor: Colors.surfaceElevated,
+  emptyWorkoutBtn: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  exerciseIndexText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Colors.accent,
-  },
-  exerciseInfo: { flex: 1, gap: 2 },
-  exerciseName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.textPrimary,
-  },
-  exerciseMeta: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-  },
-
-  // Start button
-  startButton: {
+    gap: 8,
     backgroundColor: Colors.accent,
     borderRadius: 14,
-    paddingVertical: 18,
+    paddingVertical: 16,
+    shadowColor: Colors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  emptyWorkoutText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  createRoutineBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 28,
-    shadowColor: Colors.accent,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 8,
+    gap: 8,
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    paddingVertical: 16,
+    borderWidth: 1.5,
+    borderColor: Colors.accent,
   },
-  startIcon: { marginRight: 10 },
-  startButtonText: {
+  createRoutineText: {
+    color: Colors.accent,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  routinesLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 10,
+  },
+  routineCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+  },
+  routineCardInfo: {
+    flex: 1,
+    gap: 3,
+  },
+  routineCardName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  routineCardTag: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  routineCardActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  routineStartBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: Colors.accent,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  routineStartText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 1.5,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  routineEditBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  routineEditText: {
+    color: Colors.accent,
+    fontSize: 13,
+    fontWeight: '700',
   },
 
   // Quick actions

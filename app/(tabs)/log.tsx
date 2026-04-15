@@ -12,10 +12,12 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Colors } from '@/constants/theme';
-import { EXERCISE_LIBRARY, ExerciseInfo, PREV_PERFORMANCE } from '@/constants/mockData';
+import { EXERCISE_LIBRARY, ExerciseInfo, PREV_PERFORMANCE, ROUTINES, WORKOUT_DAYS } from '@/constants/mockData';
+import { addWorkoutPoints, loadSchedule } from '@/constants/storage';
+import { calculateWorkoutPoints, computeCurrentStreak, WorkoutPointsEntry } from '@/constants/points';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -58,9 +60,25 @@ function makeSet(): WorkoutSet {
 
 export default function LogScreen() {
   const router = useRouter();
+  const { routineId } = useLocalSearchParams<{ routineId?: string }>();
+
+  // Pre-populate from routine if provided
+  const routineDefaults = useMemo(() => {
+    if (!routineId) return null;
+    return ROUTINES.find((r) => r.id === routineId) ?? null;
+  }, [routineId]);
+
   const [elapsed, setElapsed] = useState(0);
-  const [workoutName, setWorkoutName] = useState('My Workout');
-  const [exercises, setExercises] = useState<ExerciseEntry[]>([]);
+  const [workoutName, setWorkoutName] = useState(routineDefaults?.name ?? 'My Workout');
+  const [exercises, setExercises] = useState<ExerciseEntry[]>(
+    routineDefaults?.exercises.map((ex) => ({
+      id: Math.random().toString(36).slice(2),
+      exerciseId: ex.id,
+      name: ex.name,
+      muscleGroup: EXERCISE_LIBRARY.find((e) => e.id === ex.id)?.muscleGroup ?? '',
+      sets: Array.from({ length: ex.sets }, () => makeSet()),
+    })) ?? []
+  );
   const [notes, setNotes] = useState('');
   const [showPicker, setShowPicker] = useState(false);
   const [search, setSearch] = useState('');
@@ -172,6 +190,42 @@ export default function LogScreen() {
     0
   );
 
+  // ── Points summary state ──────────────────────────────────────────────────
+  const [pendingPoints, setPendingPoints] = useState<WorkoutPointsEntry | null>(null);
+  const [summaryVisible, setSummaryVisible] = useState(false);
+
+  async function handleFinish() {
+    const streak = computeCurrentStreak(WORKOUT_DAYS);
+    const today = new Date();
+    const dayName = today.toLocaleDateString('en-US', { weekday: 'long' });
+    const schedule = await loadSchedule();
+    const todayEntry = schedule.find((e) => e.day === dayName);
+    const isScheduledToday =
+      !!todayEntry?.routineId && todayEntry.routineId === routineId;
+
+    const points = calculateWorkoutPoints({
+      workoutId: `live_${Date.now()}`,
+      date: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`,
+      workoutName,
+      exercises: exercises.map((ex) => ({
+        id: ex.exerciseId,
+        name: ex.name,
+        sets: ex.sets.map((s) => ({
+          weight: s.weight,
+          reps: s.reps,
+          completed: s.completed,
+        })),
+      })),
+      prevPerformance: PREV_PERFORMANCE,
+      currentStreak: streak,
+      isScheduledToday,
+    });
+
+    await addWorkoutPoints(points);
+    setPendingPoints(points);
+    setSummaryVisible(true);
+  }
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -190,7 +244,7 @@ export default function LogScreen() {
           <Text style={styles.timerText}>{formatTimer(elapsed)}</Text>
         </View>
 
-        <TouchableOpacity style={styles.finishBtn}>
+        <TouchableOpacity style={styles.finishBtn} onPress={handleFinish}>
           <Ionicons name="checkmark" size={15} color="#fff" />
           <Text style={styles.finishText}>Finish</Text>
         </TouchableOpacity>
@@ -359,6 +413,102 @@ export default function LogScreen() {
           </ScrollView>
         </SafeAreaView>
       </Modal>
+
+      {/* ── Workout summary modal ──────────────────────────────────── */}
+      {pendingPoints && (
+        <Modal visible={summaryVisible} animationType="slide" transparent>
+          <View style={styles.summaryOverlay}>
+            <View style={styles.summarySheet}>
+              <View style={styles.summaryHandle} />
+
+              {/* Trophy */}
+              <View style={styles.summaryTrophyRow}>
+                <View style={styles.summaryTrophyCircle}>
+                  <Ionicons name="trophy" size={36} color={Colors.accent} />
+                </View>
+              </View>
+              <Text style={styles.summaryTitle}>Workout Complete!</Text>
+              <Text style={styles.summaryDuration}>{formatTimer(elapsed)}</Text>
+
+              {/* Total points */}
+              <View style={styles.summaryPointsRow}>
+                <Text style={styles.summaryPointsNum}>+{pendingPoints.total}</Text>
+                <Text style={styles.summaryPointsLabel}>points earned</Text>
+              </View>
+
+              {/* Breakdown */}
+              <View style={styles.summaryBreakdown}>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryRowLabel}>
+                    Volume{' '}
+                    <Text style={styles.summaryRowMeta}>
+                      ({(pendingPoints.volume / 1000).toFixed(1)}k lbs)
+                    </Text>
+                  </Text>
+                  <Text style={styles.summaryRowPts}>+{pendingPoints.volumePoints} pts</Text>
+                </View>
+
+                {pendingPoints.improvementBonus > 0 && (
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryRowLabel}>
+                      PRs beaten{' '}
+                      <Text style={styles.summaryRowMeta}>
+                        ({pendingPoints.improvements.length}×)
+                      </Text>
+                    </Text>
+                    <Text style={[styles.summaryRowPts, { color: Colors.success }]}>
+                      +{pendingPoints.improvementBonus} pts
+                    </Text>
+                  </View>
+                )}
+
+                {pendingPoints.streakBonus > 0 && (
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryRowLabel}>
+                      Streak bonus{' '}
+                      <Text style={styles.summaryRowMeta}>
+                        ({pendingPoints.streakDays}-day)
+                      </Text>
+                    </Text>
+                    <Text style={styles.summaryRowPts}>+{pendingPoints.streakBonus} pts</Text>
+                  </View>
+                )}
+
+                {pendingPoints.consistencyBonus > 0 && (
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryRowLabel}>Scheduled workout ✓</Text>
+                    <Text style={[styles.summaryRowPts, { color: Colors.success }]}>
+                      +{pendingPoints.consistencyBonus} pts
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {/* PR list */}
+              {pendingPoints.improvements.length > 0 && (
+                <View style={styles.summaryPRList}>
+                  {pendingPoints.improvements.map((imp, i) => (
+                    <View key={i} style={styles.summaryPRRow}>
+                      <Ionicons name="trending-up" size={13} color={Colors.success} />
+                      <Text style={styles.summaryPRText}>{imp}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={styles.summaryDoneBtn}
+                onPress={() => {
+                  setSummaryVisible(false);
+                  router.back();
+                }}
+              >
+                <Text style={styles.summaryDoneBtnText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -801,5 +951,110 @@ const styles = StyleSheet.create({
   pickerPrev: {
     fontSize: 12,
     color: Colors.textMuted,
+  },
+
+  // ── Workout summary modal
+  summaryOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+  },
+  summarySheet: {
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingBottom: 40,
+  },
+  summaryHandle: {
+    width: 36, height: 4, borderRadius: 2,
+    backgroundColor: Colors.border,
+    alignSelf: 'center',
+    marginTop: 10, marginBottom: 8,
+  },
+  summaryTrophyRow: {
+    alignItems: 'center',
+    marginTop: 12, marginBottom: 8,
+  },
+  summaryTrophyCircle: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: Colors.accent + '22',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: Colors.accent + '44',
+  },
+  summaryTitle: {
+    fontSize: 22, fontWeight: '800',
+    color: Colors.textPrimary,
+    textAlign: 'center',
+  },
+  summaryDuration: {
+    fontSize: 14, color: Colors.textMuted,
+    textAlign: 'center', marginTop: 2,
+  },
+  summaryPointsRow: {
+    alignItems: 'center',
+    marginVertical: 16,
+  },
+  summaryPointsNum: {
+    fontSize: 52, fontWeight: '900',
+    color: Colors.accent, lineHeight: 56,
+  },
+  summaryPointsLabel: {
+    fontSize: 14, color: Colors.textSecondary,
+    fontWeight: '600',
+  },
+  summaryBreakdown: {
+    marginHorizontal: 24,
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: 14,
+    padding: 14,
+    gap: 10,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  summaryRowLabel: {
+    fontSize: 14, color: Colors.textPrimary,
+    fontWeight: '500',
+  },
+  summaryRowMeta: {
+    fontSize: 12, color: Colors.textMuted,
+    fontWeight: '400',
+  },
+  summaryRowPts: {
+    fontSize: 14, fontWeight: '700',
+    color: Colors.accent,
+  },
+  summaryPRList: {
+    marginHorizontal: 24,
+    marginTop: 12,
+    gap: 6,
+  },
+  summaryPRRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  summaryPRText: {
+    fontSize: 13, color: Colors.success,
+    fontWeight: '500',
+  },
+  summaryDoneBtn: {
+    marginHorizontal: 24,
+    marginTop: 20,
+    backgroundColor: Colors.accent,
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    shadowColor: Colors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  summaryDoneBtnText: {
+    fontSize: 16, fontWeight: '800',
+    color: '#fff',
   },
 });

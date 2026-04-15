@@ -244,6 +244,168 @@ export const WORKOUT_HISTORY: WorkoutLog[] = [
     ],
   },
   {
+    id: '5',
+    name: 'Upper Body Push',
+    date: '2026-03-21',
+    dateLabel: 'Mar 21',
+    duration: '48 min',
+    exercises: [
+      {
+        id: 'bench_press', name: 'Bench Press',
+        sets: [
+          { weight: '180', reps: '8' }, { weight: '180', reps: '7' },
+          { weight: '175', reps: '8' }, { weight: '175', reps: '7' },
+        ],
+      },
+      {
+        id: 'ohp', name: 'Overhead Press',
+        sets: [
+          { weight: '110', reps: '10' }, { weight: '110', reps: '9' },
+          { weight: '110', reps: '8' },
+        ],
+      },
+      {
+        id: 'incline_db', name: 'Incline Dumbbell Press',
+        sets: [
+          { weight: '55', reps: '12' }, { weight: '55', reps: '11' },
+          { weight: '55', reps: '10' },
+        ],
+      },
+      {
+        id: 'tricep_push', name: 'Tricep Pushdown',
+        sets: [
+          { weight: '55', reps: '12' }, { weight: '55', reps: '12' },
+          { weight: '55', reps: '10' },
+        ],
+      },
+    ],
+  },
+  {
+    id: '6',
+    name: 'Pull Day',
+    date: '2026-03-27',
+    dateLabel: 'Mar 27',
+    duration: '44 min',
+    exercises: [
+      {
+        id: 'deadlift', name: 'Deadlift',
+        sets: [
+          { weight: '305', reps: '5' }, { weight: '305', reps: '5' },
+          { weight: '295', reps: '5' },
+        ],
+      },
+      {
+        id: 'barbell_row', name: 'Barbell Row',
+        sets: [
+          { weight: '150', reps: '10' }, { weight: '150', reps: '10' },
+          { weight: '150', reps: '9' },
+        ],
+      },
+      {
+        id: 'lat_pulldown', name: 'Lat Pulldown',
+        sets: [
+          { weight: '145', reps: '12' }, { weight: '145', reps: '11' },
+          { weight: '145', reps: '10' },
+        ],
+      },
+      {
+        id: 'hammer_curl', name: 'Hammer Curl',
+        sets: [
+          { weight: '38', reps: '12' }, { weight: '38', reps: '12' },
+          { weight: '38', reps: '10' },
+        ],
+      },
+    ],
+  },
+  {
+    id: '7',
+    name: 'Leg Day',
+    date: '2026-04-03',
+    dateLabel: 'Apr 3',
+    duration: '56 min',
+    exercises: [
+      {
+        id: 'squat', name: 'Squat',
+        sets: [
+          { weight: '215', reps: '8' }, { weight: '215', reps: '7' },
+          { weight: '215', reps: '6' }, { weight: '205', reps: '8' },
+        ],
+      },
+      {
+        id: 'leg_press', name: 'Leg Press',
+        sets: [
+          { weight: '340', reps: '12' }, { weight: '340', reps: '12' },
+          { weight: '340', reps: '10' },
+        ],
+      },
+      {
+        id: 'rdl', name: 'Romanian Deadlift',
+        sets: [
+          { weight: '215', reps: '10' }, { weight: '215', reps: '9' },
+          { weight: '215', reps: '9' },
+        ],
+      },
+      {
+        id: 'leg_ext', name: 'Leg Extension',
+        sets: [
+          { weight: '135', reps: '12' }, { weight: '135', reps: '12' },
+          { weight: '135', reps: '10' },
+        ],
+      },
+      {
+        id: 'calf_raise', name: 'Calf Raise',
+        sets: [
+          { weight: '175', reps: '15' }, { weight: '175', reps: '15' },
+          { weight: '175', reps: '12' },
+        ],
+      },
+    ],
+  },
+  {
+    id: '8',
+    name: 'Upper Body Push',
+    date: '2026-04-08',
+    dateLabel: 'Apr 8',
+    duration: '52 min',
+    exercises: [
+      {
+        id: 'bench_press', name: 'Bench Press',
+        sets: [
+          { weight: '183', reps: '8' }, { weight: '183', reps: '7' },
+          { weight: '180', reps: '8' }, { weight: '180', reps: '7' },
+        ],
+      },
+      {
+        id: 'incline_bench', name: 'Incline Bench Press',
+        sets: [
+          { weight: '150', reps: '10' }, { weight: '150', reps: '9' },
+          { weight: '150', reps: '8' },
+        ],
+      },
+      {
+        id: 'ohp', name: 'Overhead Press',
+        sets: [
+          { weight: '113', reps: '10' }, { weight: '113', reps: '9' },
+          { weight: '113', reps: '8' },
+        ],
+      },
+      {
+        id: 'lat_raise', name: 'Lateral Raise',
+        sets: [
+          { weight: '20', reps: '15' }, { weight: '20', reps: '15' },
+          { weight: '20', reps: '12' },
+        ],
+      },
+      {
+        id: 'tricep_push', name: 'Tricep Pushdown',
+        sets: [
+          { weight: '58', reps: '12' }, { weight: '58', reps: '12' },
+          { weight: '58', reps: '10' },
+        ],
+      },
+    ],
+  },
+  {
     id: '4',
     name: 'Full Body',
     date: '2026-04-10',
@@ -334,13 +496,59 @@ export const ROUTINES: Routine[] = [
   },
 ];
 
+// ─── PR history (used by progress charts) ────────────────────────────────────
+
+export type PRHistoryEntry = {
+  date: string;   // 'YYYY-MM-DD'
+  weight: number; // lbs (0 = bodyweight)
+  reps: number;
+};
+
+export type ExercisePRHistory = {
+  exerciseId: string;
+  name: string;
+  entries: PRHistoryEntry[];
+};
+
+export const PR_HISTORY: ExercisePRHistory[] = [
+  {
+    exerciseId: 'bench_press',
+    name: 'Bench Press',
+    entries: [
+      { date: '2026-01-06', weight: 165, reps: 8 },
+      { date: '2026-01-13', weight: 170, reps: 8 },
+      { date: '2026-02-03', weight: 172, reps: 8 },
+      { date: '2026-02-11', weight: 175, reps: 8 },
+      { date: '2026-03-17', weight: 180, reps: 8 },
+      { date: '2026-03-28', weight: 183, reps: 8 },
+      { date: '2026-04-10', weight: 185, reps: 8 },
+      { date: '2026-04-13', weight: 185, reps: 8 },
+    ],
+  },
+];
+
 // ─── Days that have workouts logged ──────────────────────────────────────────
 
 export const WORKOUT_DAYS = new Set([
-  '2026-04-13', '2026-04-12', '2026-04-11', '2026-04-10',
-  '2026-04-08', '2026-04-07', '2026-04-06',
-  '2026-04-04', '2026-04-03', '2026-04-02', '2026-04-01',
-  '2026-03-30', '2026-03-28', '2026-03-27',
-  '2026-03-25', '2026-03-24', '2026-03-22', '2026-03-21',
-  '2026-03-19', '2026-03-18', '2026-03-17',
+  // ── January streak (Jan 6–18, 21 day window) ──────────────────────────────
+  '2026-01-06', '2026-01-07', '2026-01-08',
+  '2026-01-10', '2026-01-11', '2026-01-12',
+  '2026-01-13', '2026-01-14', '2026-01-15',
+  '2026-01-17', '2026-01-18',
+  // ── (gap Jan 19–Feb 1 — streak broken) ───────────────────────────────────
+  // ── February streak (Feb 3–Feb 15) ───────────────────────────────────────
+  '2026-02-03', '2026-02-04', '2026-02-05',
+  '2026-02-07', '2026-02-08', '2026-02-09',
+  '2026-02-11', '2026-02-12', '2026-02-13',
+  '2026-02-14', '2026-02-15',
+  // ── (gap Feb 16–Mar 16 — streak broken) ──────────────────────────────────
+  // ── March–April streak (Mar 17–Apr 13 — current) ─────────────────────────
+  '2026-03-17', '2026-03-18', '2026-03-19',
+  '2026-03-21', '2026-03-22',
+  '2026-03-24', '2026-03-25',
+  '2026-03-27', '2026-03-28',
+  '2026-03-30',
+  '2026-04-01', '2026-04-02', '2026-04-03', '2026-04-04',
+  '2026-04-06', '2026-04-07', '2026-04-08',
+  '2026-04-10', '2026-04-11', '2026-04-12', '2026-04-13',
 ]);

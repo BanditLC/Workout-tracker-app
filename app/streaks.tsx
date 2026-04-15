@@ -99,12 +99,13 @@ function computeStreakRuns(workoutDays: Set<string>): StreakRun[] {
  * Determine the display type for a given calendar day.
  * Days within a streak-period but without a logged workout = 'rest'.
  * Past days outside any streak period = 'missed'.
+ * Future days = 'future' (shown dimly, no workout markers).
  */
 function getDayType(
   year: number,
   month: number,
   day: number,
-  streakPeriods: Array<{ startMs: number; endMs: number }>,
+  periods: Array<{ startMs: number; endMs: number }>,
   today: Date
 ): DayType {
   const date = new Date(year, month, day);
@@ -114,7 +115,7 @@ function getDayType(
   if (WORKOUT_DAYS.has(key)) return 'workout';
 
   const ms = date.getTime();
-  const inPeriod = streakPeriods.some((p) => ms >= p.startMs && ms <= p.endMs);
+  const inPeriod = periods.some((p) => ms >= p.startMs && ms <= p.endMs);
   return inPeriod ? 'rest' : 'missed';
 }
 
@@ -123,35 +124,39 @@ function getDayType(
 function MonthCalendar({
   year,
   month,
-  streakPeriods,
+  periods,
   today,
 }: {
   year: number;
   month: number;
-  streakPeriods: Array<{ startMs: number; endMs: number }>;
+  periods: Array<{ startMs: number; endMs: number }>;
   today: Date;
 }) {
   const weeks = useMemo(() => buildCalendarGrid(year, month), [year, month]);
 
   const workoutCount = useMemo(() => {
+    const isFuture =
+      year > today.getFullYear() ||
+      (year === today.getFullYear() && month > today.getMonth());
+    if (isFuture) return 0;
     let n = 0;
     const days = new Date(year, month + 1, 0).getDate();
     for (let d = 1; d <= days; d++) {
       if (WORKOUT_DAYS.has(dateKey(year, month, d))) n++;
     }
     return n;
-  }, [year, month]);
+  }, [year, month, today]);
 
-  // Don't render future months (no data)
   const isFutureMonth =
     year > today.getFullYear() ||
     (year === today.getFullYear() && month > today.getMonth());
-  if (isFutureMonth) return null;
 
   return (
-    <View style={styles.monthCard}>
+    <View style={[styles.monthCard, isFutureMonth && styles.monthCardFuture]}>
       <View style={styles.monthHeader}>
-        <Text style={styles.monthName}>{MONTHS[month]}</Text>
+        <Text style={[styles.monthName, isFutureMonth && styles.monthNameFuture]}>
+          {MONTHS[month]}
+        </Text>
         {workoutCount > 0 && (
           <View style={styles.monthBadge}>
             <Text style={styles.monthBadgeText}>{workoutCount} workouts</Text>
@@ -170,7 +175,7 @@ function MonthCalendar({
           {week.map((day, di) => {
             if (!day) return <View key={di} style={styles.dayCell} />;
 
-            const type = getDayType(year, month, day, streakPeriods, today);
+            const type = getDayType(year, month, day, periods, today);
             const isToday =
               year === today.getFullYear() &&
               month === today.getMonth() &&
@@ -183,6 +188,7 @@ function MonthCalendar({
                     styles.dayInner,
                     type === 'workout' && styles.dayWorkout,
                     type === 'rest' && styles.dayRest,
+                    type === 'missed' && styles.dayMissed,
                     isToday && type !== 'workout' && styles.dayToday,
                   ]}
                 >
@@ -204,22 +210,6 @@ function MonthCalendar({
           })}
         </View>
       ))}
-
-      {/* Legend for this month */}
-      <View style={styles.monthLegend}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, styles.legendWorkout]} />
-          <Text style={styles.legendText}>Workout</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, styles.legendRest]} />
-          <Text style={styles.legendText}>Rest</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, styles.legendMissed]} />
-          <Text style={styles.legendText}>Missed</Text>
-        </View>
-      </View>
     </View>
   );
 }
@@ -233,19 +223,6 @@ export default function StreaksScreen() {
   const streakRuns = useMemo(() => computeStreakRuns(WORKOUT_DAYS), []);
 
   // Pre-compute period start/end as ms for fast day-type lookup
-  const streakPeriods = useMemo(
-    () =>
-      streakRuns.map((r) => {
-        // Parse back from label using index
-        const sorted = Array.from(WORKOUT_DAYS).sort();
-        const startDate = new Date(sorted[sorted.length - r.workouts] + 'T12:00:00');
-        const endDate = new Date(sorted[sorted.length - 1] + 'T12:00:00');
-        return { startMs: startDate.getTime(), endMs: endDate.getTime() };
-      }),
-    [streakRuns]
-  );
-
-  // Build streak periods properly from workout days
   const periods = useMemo(() => {
     const sorted = Array.from(WORKOUT_DAYS)
       .sort()
@@ -340,15 +317,31 @@ export default function StreaksScreen() {
         ))}
 
         {/* ── Monthly calendars ────────────────────────────────────────── */}
-        <Text style={[styles.sectionTitle, { marginTop: 8 }]}>
-          Monthly Breakdown
-        </Text>
+        <View style={styles.monthlyHeader}>
+          <Text style={styles.sectionTitle}>Monthly Breakdown</Text>
+          {/* Shared legend */}
+          <View style={styles.legend}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, styles.legendWorkout]} />
+              <Text style={styles.legendText}>Workout</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, styles.legendRest]} />
+              <Text style={styles.legendText}>Rest</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, styles.legendMissed]} />
+              <Text style={styles.legendText}>Missed</Text>
+            </View>
+          </View>
+        </View>
+
         {months.map((month) => (
           <MonthCalendar
             key={month}
             year={YEAR}
             month={month}
-            streakPeriods={periods}
+            periods={periods}
             today={today}
           />
         ))}
@@ -508,11 +501,50 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
+  // Monthly breakdown header + legend
+  monthlyHeader: {
+    gap: 10,
+  },
+  legend: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  legendWorkout: {
+    backgroundColor: Colors.accent,
+  },
+  legendRest: {
+    backgroundColor: Colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  legendMissed: {
+    backgroundColor: 'rgba(229,57,53,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(229,57,53,0.3)',
+  },
+  legendText: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+  },
+
   // Month card
   monthCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 16,
+  },
+  monthCardFuture: {
+    opacity: 0.45,
   },
   monthHeader: {
     flexDirection: 'row',
@@ -524,6 +556,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: Colors.textPrimary,
+  },
+  monthNameFuture: {
+    color: Colors.textMuted,
   },
   monthBadge: {
     backgroundColor: Colors.surfaceElevated,
@@ -569,6 +604,9 @@ const styles = StyleSheet.create({
   dayRest: {
     backgroundColor: Colors.surfaceElevated,
   },
+  dayMissed: {
+    backgroundColor: 'rgba(229,57,53,0.1)',
+  },
   dayToday: {
     borderWidth: 1.5,
     borderColor: Colors.accent,
@@ -588,7 +626,6 @@ const styles = StyleSheet.create({
   },
   dayTextMissed: {
     color: Colors.textMuted,
-    opacity: 0.5,
   },
   dayTextFuture: {
     color: Colors.border,
@@ -596,41 +633,5 @@ const styles = StyleSheet.create({
   dayTextToday: {
     color: Colors.accent,
     fontWeight: '700',
-  },
-
-  // Legend
-  monthLegend: {
-    flexDirection: 'row',
-    gap: 16,
-    marginTop: 10,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  legendWorkout: {
-    backgroundColor: Colors.accent,
-  },
-  legendRest: {
-    backgroundColor: Colors.surfaceElevated,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  legendMissed: {
-    backgroundColor: Colors.border,
-    opacity: 0.4,
-  },
-  legendText: {
-    fontSize: 11,
-    color: Colors.textSecondary,
   },
 });
