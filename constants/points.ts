@@ -41,8 +41,40 @@ export const CONSISTENCY_BONUS = 50;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+/** Shape of a prior workout used for improvement detection. */
+type PriorWorkout = {
+  exercises: Array<{
+    id: string;
+    sets: Array<{ weight: string; reps: string }>;
+  }>;
+};
+
 /**
- * Parse PREV_PERFORMANCE strings like "185 × 8" or "BW × 10s".
+ * Find the all-time best set for an exercise across prior workouts.
+ * Returns null if the exercise has never been logged.
+ */
+function getBestFromHistory(
+  exerciseId: string,
+  priorWorkouts: PriorWorkout[]
+): { weight: number; reps: number } | null {
+  let bestW = 0, bestR = 0;
+  for (const workout of priorWorkouts) {
+    for (const ex of workout.exercises) {
+      if (ex.id !== exerciseId) continue;
+      for (const set of ex.sets) {
+        const w = parseFloat(set.weight);
+        const r = parseInt(set.reps, 10);
+        if (!isNaN(w) && !isNaN(r) && w > 0) {
+          if (w > bestW || (w === bestW && r > bestR)) { bestW = w; bestR = r; }
+        }
+      }
+    }
+  }
+  return bestW > 0 ? { weight: bestW, reps: bestR } : null;
+}
+
+/**
+ * Fallback: parse PREV_PERFORMANCE strings like "185 × 8" or "BW × 10s".
  * Returns null for bodyweight entries.
  */
 function parsePrev(prev: string): { weight: number; reps: number } | null {
@@ -65,7 +97,13 @@ export type PointsCalcInput = {
     name: string;
     sets: Array<{ weight: string; reps: string; completed: boolean }>;
   }>;
+  /** Static fallback for exercises not yet in workout history. */
   prevPerformance: Record<string, string>;
+  /**
+   * Real workout history (prior workouts only, not including the current one).
+   * Used first for improvement detection; prevPerformance is the fallback.
+   */
+  priorWorkouts: PriorWorkout[];
   currentStreak: number;
   isScheduledToday: boolean;
 };
@@ -73,7 +111,7 @@ export type PointsCalcInput = {
 export function calculateWorkoutPoints(input: PointsCalcInput): WorkoutPointsEntry {
   const {
     workoutId, date, workoutName,
-    exercises, prevPerformance,
+    exercises, prevPerformance, priorWorkouts,
     currentStreak, isScheduledToday,
   } = input;
 
@@ -90,14 +128,15 @@ export function calculateWorkoutPoints(input: PointsCalcInput): WorkoutPointsEnt
   const volumePoints = Math.floor(volume / 100) * POINTS_PER_100_LBS;
 
   // ── Improvement bonus ───────────────────────────────────────────────────
+  // Prefer real history for prior-best; fall back to static PREV_PERFORMANCE strings.
   const improvements: string[] = [];
   for (const ex of exercises) {
-    const prev = prevPerformance[ex.id];
-    if (!prev) continue;
-    const prevParsed = parsePrev(prev);
+    const prevParsed =
+      getBestFromHistory(ex.id, priorWorkouts) ??
+      parsePrev(prevPerformance[ex.id] ?? '');
     if (!prevParsed) continue;
 
-    // Best completed set for this exercise
+    // Best completed set for this exercise in the current workout
     let bestW = 0, bestR = 0;
     for (const set of ex.sets) {
       if (!set.completed) continue;

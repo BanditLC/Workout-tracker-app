@@ -15,8 +15,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Colors } from '@/constants/theme';
-import { EXERCISE_LIBRARY, ExerciseInfo, PREV_PERFORMANCE, ROUTINES, WORKOUT_DAYS } from '@/constants/mockData';
-import { addWorkoutPoints, loadSchedule } from '@/constants/storage';
+import { EXERCISE_LIBRARY, ExerciseInfo, PREV_PERFORMANCE, WorkoutLog } from '@/constants/mockData';
+import { addWorkoutPoints, loadRoutines, loadSchedule, loadWorkoutHistory, saveWorkoutLog } from '@/constants/storage';
 import { calculateWorkoutPoints, computeCurrentStreak, WorkoutPointsEntry } from '@/constants/points';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -62,23 +62,29 @@ export default function LogScreen() {
   const router = useRouter();
   const { routineId } = useLocalSearchParams<{ routineId?: string }>();
 
-  // Pre-populate from routine if provided
-  const routineDefaults = useMemo(() => {
-    if (!routineId) return null;
-    return ROUTINES.find((r) => r.id === routineId) ?? null;
-  }, [routineId]);
-
   const [elapsed, setElapsed] = useState(0);
-  const [workoutName, setWorkoutName] = useState(routineDefaults?.name ?? 'My Workout');
-  const [exercises, setExercises] = useState<ExerciseEntry[]>(
-    routineDefaults?.exercises.map((ex) => ({
-      id: Math.random().toString(36).slice(2),
-      exerciseId: ex.id,
-      name: ex.name,
-      muscleGroup: EXERCISE_LIBRARY.find((e) => e.id === ex.id)?.muscleGroup ?? '',
-      sets: Array.from({ length: ex.sets }, () => makeSet()),
-    })) ?? []
-  );
+  const [workoutName, setWorkoutName] = useState('My Workout');
+  const [exercises, setExercises] = useState<ExerciseEntry[]>([]);
+
+  // Pre-populate from routine — load from AsyncStorage so user-created routines work
+  useEffect(() => {
+    if (!routineId) return;
+    loadRoutines().then((routines) => {
+      const found = routines.find((r) => r.id === routineId);
+      if (!found) return;
+      setWorkoutName(found.name);
+      setExercises(
+        found.exercises.map((ex) => ({
+          id: Math.random().toString(36).slice(2),
+          exerciseId: ex.id,
+          name: ex.name,
+          muscleGroup: EXERCISE_LIBRARY.find((e) => e.id === ex.id)?.muscleGroup ?? '',
+          sets: Array.from({ length: ex.sets }, () => makeSet()),
+        }))
+      );
+    });
+  }, [routineId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [notes, setNotes] = useState('');
   const [showPicker, setShowPicker] = useState(false);
   const [search, setSearch] = useState('');
@@ -195,17 +201,26 @@ export default function LogScreen() {
   const [summaryVisible, setSummaryVisible] = useState(false);
 
   async function handleFinish() {
-    const streak = computeCurrentStreak(WORKOUT_DAYS);
     const today = new Date();
+    const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+    // Load prior history for streak + improvement detection (before saving this workout)
+    const [priorHistory, schedule] = await Promise.all([
+      loadWorkoutHistory(),
+      loadSchedule(),
+    ]);
+    const historyDays = new Set(priorHistory.map((w) => w.date));
+    const streak = computeCurrentStreak(historyDays);
+
     const dayName = today.toLocaleDateString('en-US', { weekday: 'long' });
-    const schedule = await loadSchedule();
     const todayEntry = schedule.find((e) => e.day === dayName);
     const isScheduledToday =
       !!todayEntry?.routineId && todayEntry.routineId === routineId;
 
+    const workoutId = `live_${Date.now()}`;
     const points = calculateWorkoutPoints({
-      workoutId: `live_${Date.now()}`,
-      date: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`,
+      workoutId,
+      date: dateStr,
       workoutName,
       exercises: exercises.map((ex) => ({
         id: ex.exerciseId,
@@ -217,11 +232,33 @@ export default function LogScreen() {
         })),
       })),
       prevPerformance: PREV_PERFORMANCE,
+      // Pass real history so improvement detection uses actual prior bests
+      priorWorkouts: priorHistory,
       currentStreak: streak,
       isScheduledToday,
     });
 
     await addWorkoutPoints(points);
+
+    // Save the workout to history so charts and history screen show real data
+    const workoutLog: WorkoutLog = {
+      id: workoutId,
+      name: workoutName,
+      date: dateStr,
+      dateLabel: 'Today',
+      duration: formatTimer(elapsed),
+      exercises: exercises
+        .map((ex) => ({
+          id: ex.exerciseId,
+          name: ex.name,
+          sets: ex.sets
+            .filter((s) => s.completed)
+            .map((s) => ({ weight: s.weight, reps: s.reps })),
+        }))
+        .filter((ex) => ex.sets.length > 0),
+    };
+    await saveWorkoutLog(workoutLog);
+
     setPendingPoints(points);
     setSummaryVisible(true);
   }

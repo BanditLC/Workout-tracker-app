@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -121,15 +121,19 @@ export default function ScheduleScreen() {
   const [draft, setDraft] = useState<ScheduleEntry[]>([]);
   const [saving, setSaving] = useState(false);
   const [pickerDayIndex, setPickerDayIndex] = useState<number | null>(null);
+  // quickAssign = true means the picker was opened from view mode (rest day tap) — auto-saves on select
+  const [quickAssign, setQuickAssign] = useState(false);
 
-  useEffect(() => {
-    Promise.all([loadSchedule(), loadRoutines()]).then(([sched, rts]) => {
-      setSchedule(sched);
-      setDraft(sched);
-      setRoutines(rts);
-      setIsReady(true);
-    });
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      Promise.all([loadSchedule(), loadRoutines()]).then(([sched, rts]) => {
+        setSchedule(sched);
+        setDraft(sched);
+        setRoutines(rts);
+        setIsReady(true);
+      });
+    }, [])
+  );
 
   function getRoutine(id: string | null): Routine | undefined {
     if (!id) return undefined;
@@ -157,11 +161,27 @@ export default function ScheduleScreen() {
     }
   }
 
-  function handleSelect(dayIndex: number, routineId: string | null) {
-    setDraft((prev) =>
-      prev.map((entry, i) => (i === dayIndex ? { ...entry, routineId } : entry))
-    );
+  async function handleSelect(dayIndex: number, routineId: string | null) {
+    if (quickAssign) {
+      // View-mode quick assign: update schedule immediately and persist
+      const updated = schedule.map((entry, i) =>
+        i === dayIndex ? { ...entry, routineId } : entry
+      );
+      setSchedule(updated);
+      setDraft(updated);
+      await saveSchedule(updated);
+    } else {
+      setDraft((prev) =>
+        prev.map((entry, i) => (i === dayIndex ? { ...entry, routineId } : entry))
+      );
+    }
     setPickerDayIndex(null);
+    setQuickAssign(false);
+  }
+
+  function openQuickAssign(dayIndex: number) {
+    setQuickAssign(true);
+    setPickerDayIndex(dayIndex);
   }
 
   function startRoutine(routineId: string) {
@@ -263,9 +283,13 @@ export default function ScheduleScreen() {
                   <Text style={styles.changeBtnText}>Change</Text>
                 </TouchableOpacity>
               ) : isRest ? (
-                <View style={styles.restIcon}>
-                  <Ionicons name="moon-outline" size={16} color={Colors.textMuted} />
-                </View>
+                <TouchableOpacity
+                  style={styles.assignBtn}
+                  onPress={() => openQuickAssign(i)}
+                >
+                  <Ionicons name="add" size={14} color={Colors.accent} />
+                  <Text style={styles.assignBtnText}>Assign</Text>
+                </TouchableOpacity>
               ) : (
                 <TouchableOpacity
                   style={styles.playBtn}
@@ -294,7 +318,7 @@ export default function ScheduleScreen() {
           currentId={pickerEntry.routineId}
           routines={routines}
           onSelect={(id) => handleSelect(pickerDayIndex, id)}
-          onClose={() => setPickerDayIndex(null)}
+          onClose={() => { setPickerDayIndex(null); setQuickAssign(false); }}
         />
       )}
     </SafeAreaView>
@@ -426,13 +450,21 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 4,
   },
-  restIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: Colors.surfaceElevated,
+  assignBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.accent + '55',
+  },
+  assignBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.accent,
   },
   changeBtn: {
     paddingHorizontal: 12,

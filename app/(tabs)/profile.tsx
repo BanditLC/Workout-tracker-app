@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -15,8 +15,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Colors } from '@/constants/theme';
-import { WORKOUT_DAYS, WORKOUT_HISTORY, PR_HISTORY } from '@/constants/mockData';
-import { loadPoints } from '@/constants/storage';
+import { WorkoutLog } from '@/constants/mockData';
+import { loadPoints, loadWorkoutHistory } from '@/constants/storage';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,7 +46,7 @@ function addDays(d: Date, n: number): Date {
 
 const WEEK_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-function WeekStrip({ today }: { today: Date }) {
+function WeekStrip({ today, workoutDays }: { today: Date; workoutDays: Set<string> }) {
   const days = useMemo(() => {
     const monday = getMonday(today);
     const todayKey = dateKey(today);
@@ -56,12 +56,12 @@ function WeekStrip({ today }: { today: Date }) {
       const isToday = key === todayKey;
       let status: DayStatus;
       if (date > today && !isToday) status = 'future';
-      else if (WORKOUT_DAYS.has(key)) status = 'workout';
+      else if (workoutDays.has(key)) status = 'workout';
       else if (isToday) status = 'today';
       else status = 'missed';
       return { letter, dayNum: date.getDate(), status, isToday };
     });
-  }, [today]);
+  }, [today, workoutDays]);
 
   return (
     <View style={styles.weekStrip}>
@@ -151,7 +151,7 @@ function BarChart({
 
 // ─── Frequency Chart ──────────────────────────────────────────────────────────
 
-function FrequencyChart({ today }: { today: Date }) {
+function FrequencyChart({ today, workoutDays }: { today: Date; workoutDays: Set<string> }) {
   const bars = useMemo(() => {
     const monday = getMonday(today);
     return Array.from({ length: 8 }, (_, i) => {
@@ -160,7 +160,7 @@ function FrequencyChart({ today }: { today: Date }) {
       for (let d = 0; d < 7; d++) {
         const day = addDays(weekStart, d);
         if (day > today) break;
-        if (WORKOUT_DAYS.has(dateKey(day))) count++;
+        if (workoutDays.has(dateKey(day))) count++;
       }
       return {
         value: count,
@@ -168,7 +168,7 @@ function FrequencyChart({ today }: { today: Date }) {
         isCurrent: i === 7,
       };
     });
-  }, [today]);
+  }, [today, workoutDays]);
 
   const maxValue = useMemo(() => Math.max(...bars.map((b) => b.value), 1), [bars]);
 
@@ -184,18 +184,19 @@ function FrequencyChart({ today }: { today: Date }) {
 
 // ─── Volume Chart ─────────────────────────────────────────────────────────────
 
-function VolumeChart({ today }: { today: Date }) {
+function VolumeChart({ today, workoutHistory }: { today: Date; workoutHistory: WorkoutLog[] }) {
   const bars = useMemo(() => {
     const monday = getMonday(today);
     return Array.from({ length: 8 }, (_, i) => {
       const weekStart = addDays(monday, -(7 - i) * 7);
       const weekEnd = addDays(weekStart, 6);
       let volume = 0;
-      for (const log of WORKOUT_HISTORY) {
+      for (const log of workoutHistory) {
         const logDate = new Date(log.date + 'T12:00:00');
         if (logDate >= weekStart && logDate <= weekEnd) {
           for (const ex of log.exercises) {
             for (const set of ex.sets) {
+              // Total volume = weight × reps, summed across all sets
               const w = parseFloat(set.weight);
               const r = parseInt(set.reps, 10);
               if (!isNaN(w) && !isNaN(r) && w > 0) volume += w * r;
@@ -209,7 +210,7 @@ function VolumeChart({ today }: { today: Date }) {
         isCurrent: i === 7,
       };
     });
-  }, [today]);
+  }, [today, workoutHistory]);
 
   const maxValue = useMemo(() => Math.max(...bars.map((b) => b.value), 1), [bars]);
   const hasData = bars.some((b) => b.value > 0);
@@ -235,31 +236,67 @@ function VolumeChart({ today }: { today: Date }) {
 // ─── PR Trend Chart ───────────────────────────────────────────────────────────
 
 const DOT = 9;
-const TREND_H = 68;
+const TREND_H = 80;
 
-function PRTrendChart() {
-  const history = PR_HISTORY[0]; // bench press
+// Derive bench press best-set per workout from history
+function getBenchPressEntries(workoutHistory: WorkoutLog[]) {
+  const byDate: Record<string, number> = {};
+  for (const log of workoutHistory) {
+    for (const ex of log.exercises) {
+      if (ex.id !== 'bench_press') continue;
+      const best = ex.sets.reduce((max, s) => {
+        const w = parseFloat(s.weight);
+        return !isNaN(w) && w > max ? w : max;
+      }, 0);
+      if (best > 0) {
+        byDate[log.date] = Math.max(byDate[log.date] ?? 0, best);
+      }
+    }
+  }
+  return Object.entries(byDate)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, weight]) => ({ date, weight }));
+}
 
-  if (!history || history.entries.length < 2) {
+function PRTrendChart({ workoutHistory }: { workoutHistory: WorkoutLog[] }) {
+  const [chartWidth, setChartWidth] = useState(0);
+
+  const entries = useMemo(
+    () => getBenchPressEntries(workoutHistory),
+    [workoutHistory]
+  );
+
+  if (entries.length < 2) {
     return (
       <View style={styles.emptyChart}>
-        <Text style={styles.emptyChartText}>Keep logging to see your progression trend</Text>
+        <Text style={styles.emptyChartText}>
+          Log bench press workouts to see your progression trend
+        </Text>
       </View>
     );
   }
 
-  const { entries } = history;
   const weights = entries.map((e) => e.weight);
   const minW = Math.min(...weights);
   const maxW = Math.max(...weights);
   const range = maxW - minW || 1;
   const gain = maxW - weights[0];
+  const n = entries.length;
+  const colWidth = chartWidth / n;
+
+  // Compute dot center positions
+  const dotPositions = entries.map((e, i) => {
+    const pct = (e.weight - minW) / range;
+    const cx = (i + 0.5) * colWidth;
+    const cy = (1 - pct) * (TREND_H - DOT) + DOT / 2;
+    return { cx, cy };
+  });
 
   return (
     <View>
       {/* Subtitle row */}
       <View style={styles.trendSubRow}>
-        <Text style={styles.trendExName}>{history.name}</Text>
+        <Text style={styles.trendExName}>Bench Press</Text>
         {gain > 0 && (
           <View style={styles.trendGainBadge}>
             <Ionicons name="trending-up" size={12} color={Colors.success} />
@@ -268,7 +305,7 @@ function PRTrendChart() {
         )}
       </View>
 
-      {/* Y range labels + dot chart */}
+      {/* Y range labels + chart */}
       <View style={styles.trendOuter}>
         {/* Y-axis */}
         <View style={styles.trendYAxis}>
@@ -276,40 +313,68 @@ function PRTrendChart() {
           <Text style={styles.trendYLabel}>{minW}</Text>
         </View>
 
-        {/* Dots */}
-        <View style={{ flex: 1 }}>
-          <View style={{ height: TREND_H, flexDirection: 'row' }}>
-            {entries.map((entry, i) => {
-              const pct = (entry.weight - minW) / range;
-              const top = (1 - pct) * (TREND_H - DOT);
-              const isLast = i === entries.length - 1;
+        {/* Dots + connecting lines */}
+        <View
+          style={{ flex: 1 }}
+          onLayout={(e) => setChartWidth(e.nativeEvent.layout.width)}
+        >
+          <View style={{ height: TREND_H }}>
+            {/* Connecting lines between consecutive dots */}
+            {chartWidth > 0 && dotPositions.map((pos, i) => {
+              if (i === 0) return null;
+              const prev = dotPositions[i - 1];
+              const dx = pos.cx - prev.cx;
+              const dy = pos.cy - prev.cy;
+              const length = Math.sqrt(dx * dx + dy * dy);
+              const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+              const mx = (prev.cx + pos.cx) / 2;
+              const my = (prev.cy + pos.cy) / 2;
               return (
-                <View key={i} style={{ flex: 1, height: TREND_H }}>
+                <View
+                  key={`line-${i}`}
+                  style={{
+                    position: 'absolute',
+                    left: mx - length / 2,
+                    top: my - 1,
+                    width: length,
+                    height: 2,
+                    backgroundColor: Colors.accent + '60',
+                    transform: [{ rotate: `${angle}deg` }],
+                  }}
+                />
+              );
+            })}
+
+            {/* Dots */}
+            {chartWidth > 0 && entries.map((entry, i) => {
+              const { cx, cy } = dotPositions[i];
+              const isLast = i === n - 1;
+              return (
+                <View
+                  key={i}
+                  style={{
+                    position: 'absolute',
+                    left: cx - DOT / 2,
+                    top: cy - DOT / 2,
+                  }}
+                >
                   <View
-                    style={{
-                      position: 'absolute',
-                      top,
-                      left: 0,
-                      right: 0,
-                      alignItems: 'center',
-                    }}
-                  >
-                    <View
-                      style={[
-                        styles.trendDot,
-                        {
-                          backgroundColor: isLast ? Colors.accent : Colors.background,
-                          borderColor: isLast ? Colors.accent : Colors.surfaceElevated,
-                        },
-                      ]}
-                    />
-                  </View>
+                    style={[
+                      styles.trendDot,
+                      {
+                        backgroundColor: isLast ? Colors.accent : Colors.background,
+                        borderColor: isLast ? Colors.accent : Colors.accent + '80',
+                      },
+                    ]}
+                  />
                 </View>
               );
             })}
           </View>
+
           {/* Baseline */}
           <View style={styles.trendBaseline} />
+
           {/* X labels */}
           <View style={{ flexDirection: 'row', marginTop: 4 }}>
             {entries.map((entry, i) => (
@@ -463,13 +528,25 @@ export default function ProfileScreen() {
   });
   const [editVisible, setEditVisible] = useState(false);
   const [totalPoints, setTotalPoints] = useState(0);
+  const [workoutHistory, setWorkoutHistory] = useState<WorkoutLog[]>([]);
 
-  useEffect(() => {
-    loadPoints().then((p) => setTotalPoints(p.totalPoints));
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      Promise.all([loadPoints(), loadWorkoutHistory()]).then(([pts, history]) => {
+        setTotalPoints(pts.totalPoints);
+        setWorkoutHistory(history);
+      });
+    }, [])
+  );
+
+  // Derive workout days Set from stored history for calendar/frequency chart
+  const workoutDays = useMemo(
+    () => new Set(workoutHistory.map((w) => w.date)),
+    [workoutHistory]
+  );
 
   const STATS = [
-    { label: 'Workouts', value: String(WORKOUT_DAYS.size) },
+    { label: 'Workouts', value: String(workoutDays.size) },
     { label: 'Best Streak', value: '21d' },
     { label: 'Points', value: totalPoints.toLocaleString() },
   ];
@@ -546,7 +623,7 @@ export default function ProfileScreen() {
               <Ionicons name="chevron-forward" size={13} color={Colors.accent} />
             </TouchableOpacity>
           </View>
-          <WeekStrip today={today} />
+          <WeekStrip today={today} workoutDays={workoutDays} />
         </View>
 
         {/* ── Frequency chart ────────────────────────────── */}
@@ -555,7 +632,7 @@ export default function ProfileScreen() {
             <Text style={styles.cardTitle}>Workouts / Week</Text>
             <Text style={styles.cardSub}>Last 8 weeks</Text>
           </View>
-          <FrequencyChart today={today} />
+          <FrequencyChart today={today} workoutDays={workoutDays} />
         </View>
 
         {/* ── Volume chart ───────────────────────────────── */}
@@ -564,7 +641,7 @@ export default function ProfileScreen() {
             <Text style={styles.cardTitle}>Volume / Week</Text>
             <Text style={styles.cardSub}>Weight × reps (k lbs)</Text>
           </View>
-          <VolumeChart today={today} />
+          <VolumeChart today={today} workoutHistory={workoutHistory} />
         </View>
 
         {/* ── PR trend chart ─────────────────────────────── */}
@@ -573,7 +650,7 @@ export default function ProfileScreen() {
             <Text style={styles.cardTitle}>Top Lift Trend</Text>
             <Text style={styles.cardSub}>Best set per session</Text>
           </View>
-          <PRTrendChart />
+          <PRTrendChart workoutHistory={workoutHistory} />
         </View>
 
         {/* ── Menu ───────────────────────────────────────── */}

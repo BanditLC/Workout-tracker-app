@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Routine, ROUTINES } from './mockData';
+import { Routine, ROUTINES, WorkoutLog, WORKOUT_HISTORY } from './mockData';
 import {
   PointsStore,
   WorkoutPointsEntry,
@@ -119,4 +119,35 @@ export async function upsertRoutine(routine: Routine): Promise<void> {
 export async function deleteRoutine(id: string): Promise<void> {
   const existing = await loadRoutines();
   await saveRoutines(existing.filter((r) => r.id !== id));
+}
+
+// ─── Workout History ──────────────────────────────────────────────────────────
+
+const WORKOUT_HISTORY_KEY = '@workout_tracker:workout_history';
+
+/**
+ * Load workout history from AsyncStorage.
+ * First launch: seeds from WORKOUT_HISTORY mock data.
+ */
+export async function loadWorkoutHistory(): Promise<WorkoutLog[]> {
+  try {
+    const raw = await AsyncStorage.getItem(WORKOUT_HISTORY_KEY);
+    if (raw === null) {
+      await AsyncStorage.setItem(WORKOUT_HISTORY_KEY, JSON.stringify(WORKOUT_HISTORY));
+      return WORKOUT_HISTORY;
+    }
+    return JSON.parse(raw) as WorkoutLog[];
+  } catch {
+    return WORKOUT_HISTORY;
+  }
+}
+
+/** Append (or replace) a completed workout in storage. */
+export async function saveWorkoutLog(log: WorkoutLog): Promise<void> {
+  const existing = await loadWorkoutHistory();
+  const filtered = existing.filter((w) => w.id !== log.id);
+  await AsyncStorage.setItem(
+    WORKOUT_HISTORY_KEY,
+    JSON.stringify([...filtered, log])
+  );
 }
