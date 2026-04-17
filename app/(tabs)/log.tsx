@@ -475,7 +475,7 @@ export default function LogScreen() {
 
               {/* Breakdown */}
               <View style={styles.summaryBreakdown}>
-                <View style={styles.summaryRow}>
+                <View style={styles.summaryBreakdownRow}>
                   <Text style={styles.summaryRowLabel}>
                     Volume{' '}
                     <Text style={styles.summaryRowMeta}>
@@ -486,7 +486,7 @@ export default function LogScreen() {
                 </View>
 
                 {pendingPoints.improvementBonus > 0 && (
-                  <View style={styles.summaryRow}>
+                  <View style={styles.summaryBreakdownRow}>
                     <Text style={styles.summaryRowLabel}>
                       PRs beaten{' '}
                       <Text style={styles.summaryRowMeta}>
@@ -500,7 +500,7 @@ export default function LogScreen() {
                 )}
 
                 {pendingPoints.streakBonus > 0 && (
-                  <View style={styles.summaryRow}>
+                  <View style={styles.summaryBreakdownRow}>
                     <Text style={styles.summaryRowLabel}>
                       Streak bonus{' '}
                       <Text style={styles.summaryRowMeta}>
@@ -512,7 +512,7 @@ export default function LogScreen() {
                 )}
 
                 {pendingPoints.consistencyBonus > 0 && (
-                  <View style={styles.summaryRow}>
+                  <View style={styles.summaryBreakdownRow}>
                     <Text style={styles.summaryRowLabel}>Scheduled workout ✓</Text>
                     <Text style={[styles.summaryRowPts, { color: Colors.success }]}>
                       +{pendingPoints.consistencyBonus} pts
@@ -1046,7 +1046,7 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 10,
   },
-  summaryRow: {
+  summaryBreakdownRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
