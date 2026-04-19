@@ -522,7 +522,7 @@ export default function ProfileScreen() {
   const today = useMemo(() => new Date(), []);
 
   const [profile, setProfile] = useState<ProfileData>({
-    name: user?.name ?? '',
+    name: (user?.user_metadata?.name as string) ?? '',
     goal: 'Build Muscle',
     age: '22',
     weight: '175',

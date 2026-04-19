@@ -1,92 +1,86 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Session, User } from '@supabase/supabase-js';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 
-export type User = {
-  id: string;
-  email: string;
-  name: string;
-};
+import { supabase } from '@/lib/supabase';
 
 type AuthState = {
+  session: Session | null;
   user: User | null;
   isLoading: boolean;
   signUp: (email: string, password: string, name: string) => Promise<{ error?: string }>;
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
+  signInWithProvider: (provider: 'google' | 'azure') => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
 
-const SESSION_KEY = '@workout_tracker:session';
-const USERS_KEY = '@workout_tracker:users';
-
-type StoredUser = User & { password: string };
-
-async function getUsers(): Promise<StoredUser[]> {
-  const raw = await AsyncStorage.getItem(USERS_KEY);
-  return raw ? JSON.parse(raw) : [];
-}
-
-async function saveUsers(users: StoredUser[]): Promise<void> {
-  await AsyncStorage.setItem(USERS_KEY, JSON.stringify(users));
-}
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    AsyncStorage.getItem(SESSION_KEY)
-      .then((raw) => {
-        if (raw) setUser(JSON.parse(raw));
-      })
-      .finally(() => setIsLoading(false));
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
+      setIsLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const signUp = useCallback(async (email: string, password: string, name: string) => {
-    const trimmedEmail = email.trim().toLowerCase();
-    const users = await getUsers();
-
-    if (users.some((u) => u.email === trimmedEmail)) {
-      return { error: 'An account with this email already exists.' };
-    }
-
-    const newUser: StoredUser = {
-      id: `user_${Date.now()}`,
-      email: trimmedEmail,
-      name: name.trim(),
+    const { error } = await supabase.auth.signUp({
+      email: email.trim().toLowerCase(),
       password,
-    };
-
-    await saveUsers([...users, newUser]);
-    const session: User = { id: newUser.id, email: newUser.email, name: newUser.name };
-    await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(session));
-    setUser(session);
+      options: { data: { name: name.trim() } },
+    });
+    if (error) return { error: error.message };
     return {};
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    const trimmedEmail = email.trim().toLowerCase();
-    const users = await getUsers();
-    const match = users.find((u) => u.email === trimmedEmail && u.password === password);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
+    });
+    if (error) return { error: error.message };
+    return {};
+  }, []);
 
-    if (!match) {
-      return { error: 'Invalid email or password.' };
-    }
+  const signInWithProvider = useCallback(async (provider: 'google' | 'azure') => {
+    const redirectTo = Platform.OS === 'web'
+      ? window.location.origin
+      : 'workouttracker://auth/callback';
 
-    const session: User = { id: match.id, email: match.email, name: match.name };
-    await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(session));
-    setUser(session);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo },
+    });
+    if (error) return { error: error.message };
     return {};
   }, []);
 
   const signOut = useCallback(async () => {
-    await AsyncStorage.removeItem(SESSION_KEY);
-    setUser(null);
+    await supabase.auth.signOut();
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, signUp, signIn, signOut }}>
+    <AuthContext.Provider
+      value={{
+        session,
+        user: session?.user ?? null,
+        isLoading,
+        signUp,
+        signIn,
+        signInWithProvider,
+        signOut,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

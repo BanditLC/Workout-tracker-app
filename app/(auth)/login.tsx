@@ -18,7 +18,7 @@ import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginScreen() {
-  const { signIn } = useAuth();
+  const { signIn, signInWithProvider } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -33,6 +33,12 @@ export default function LoginScreen() {
     setLoading(true);
     const result = await signIn(email, password);
     setLoading(false);
+    if (result.error) setError(result.error);
+  }
+
+  async function handleOAuth(provider: 'google' | 'azure') {
+    setError('');
+    const result = await signInWithProvider(provider);
     if (result.error) setError(result.error);
   }
 
@@ -107,6 +113,28 @@ export default function LoginScreen() {
               ) : (
                 <Text style={styles.submitBtnText}>Sign In</Text>
               )}
+            </TouchableOpacity>
+
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <TouchableOpacity
+              style={styles.oauthBtn}
+              onPress={() => handleOAuth('google')}
+            >
+              <Ionicons name="logo-google" size={20} color={Colors.textPrimary} />
+              <Text style={styles.oauthBtnText}>Continue with Google</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.oauthBtn}
+              onPress={() => handleOAuth('azure')}
+            >
+              <Ionicons name="logo-microsoft" size={20} color={Colors.textPrimary} />
+              <Text style={styles.oauthBtnText}>Continue with Microsoft</Text>
             </TouchableOpacity>
           </View>
 
@@ -223,6 +251,40 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#fff',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 24,
+    marginBottom: 8,
+    gap: 12,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.border,
+  },
+  dividerText: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    fontWeight: '500',
+  },
+  oauthBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: 12,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginTop: 10,
+  },
+  oauthBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.textPrimary,
   },
   footer: {
     flexDirection: 'row',
