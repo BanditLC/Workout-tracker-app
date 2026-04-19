@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -192,6 +192,13 @@ export default function HomeScreen() {
   const [routines, setRoutines] = useState<Routine[]>(ROUTINES);
   const [totalPoints, setTotalPoints] = useState(0);
   const [pictureUri, setPictureUri] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPictureUri(null);
+    loadRoutines().then(setRoutines);
+    loadPoints().then((p) => setTotalPoints(p.totalPoints));
+    loadProfile().then((p) => setPictureUri(p.pictureUri));
+  }, [user?.id]);
 
   useFocusEffect(
     useCallback(() => {
