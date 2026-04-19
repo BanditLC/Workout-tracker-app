@@ -38,6 +38,13 @@
             "backgroundColor": "#ffffff"
           }
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Allow Workout Tracker to take profile photos.",
+          "photosPermission": "Allow Workout Tracker to choose a profile photo."
+        }
       ]
     ],
     "experiments": {
