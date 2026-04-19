@@ -24,6 +24,7 @@ import {
   Routine,
 } from '@/constants/mockData';
 import { loadRoutines, upsertRoutine } from '@/constants/storage';
+import { useAuth } from '@/contexts/AuthContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -57,6 +58,7 @@ function routineToEntries(routine: Routine): RoutineEntry[] {
 
 export default function RoutineEditorScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const { id } = useLocalSearchParams<{ id: string }>();
   const isNew = id === 'new';
 
@@ -189,7 +191,7 @@ export default function RoutineEditorScreen() {
 
     setSaving(true);
     try {
-      await upsertRoutine(routine);
+      await upsertRoutine(routine, user?.id);
       router.back();
     } catch {
       Alert.alert('Error', 'Could not save routine. Please try again.');

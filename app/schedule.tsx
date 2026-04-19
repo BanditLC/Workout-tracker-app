@@ -20,6 +20,7 @@ import {
   loadSchedule,
   saveSchedule,
 } from '@/constants/storage';
+import { useAuth } from '@/contexts/AuthContext';
 
 const TODAY_DOW = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 
@@ -113,6 +114,7 @@ function RoutinePicker({
 
 export default function ScheduleScreen() {
   const router = useRouter();
+  const { user } = useAuth();
 
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
   const [routines, setRoutines] = useState<Routine[]>([]);
@@ -153,7 +155,7 @@ export default function ScheduleScreen() {
   async function saveEdit() {
     setSaving(true);
     try {
-      await saveSchedule(draft);
+      await saveSchedule(draft, user?.id);
       setSchedule(draft);
       setEditMode(false);
     } finally {
@@ -169,7 +171,7 @@ export default function ScheduleScreen() {
       );
       setSchedule(updated);
       setDraft(updated);
-      await saveSchedule(updated);
+      await saveSchedule(updated, user?.id);
     } else {
       setDraft((prev) =>
         prev.map((entry, i) => (i === dayIndex ? { ...entry, routineId } : entry))

@@ -20,6 +20,8 @@ import { Colors } from '@/constants/theme';
 import { WorkoutLog } from '@/constants/mockData';
 import { loadPoints, loadWorkoutHistory, loadProfile, saveProfile } from '@/constants/storage';
 import type { ProfileData } from '@/constants/storage';
+import { useAuth } from '@/contexts/AuthContext';
+import { getSupabase } from '@/lib/supabase';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -561,25 +563,41 @@ export default function ProfileScreen() {
   const handleProfileSave = useCallback((formData: ProfileFormData) => {
     const updated = { ...profile, ...formData };
     setProfile(updated);
-    saveProfile(updated);
+    saveProfile(updated, user?.id);
     setEditVisible(false);
-  }, [profile]);
+  }, [profile, user]);
 
   const updatePicture = useCallback(async (source: 'camera' | 'library' | 'remove') => {
     setPickerVisible(false);
     if (source === 'remove') {
       const updated = { ...profile, pictureUri: null };
       setProfile(updated);
-      saveProfile(updated);
+      saveProfile(updated, user?.id);
       return;
     }
-    const uri = await pickImage(source);
-    if (uri) {
-      const updated = { ...profile, pictureUri: uri };
-      setProfile(updated);
-      saveProfile(updated);
+    const localUri = await pickImage(source);
+    if (!localUri) return;
+
+    let pictureUri = localUri;
+
+    if (user?.id) {
+      try {
+        const response = await fetch(localUri);
+        const blob = await response.blob();
+        const filePath = `${user.id}/profile.jpg`;
+        await getSupabase().storage.from('avatars').upload(filePath, blob, {
+          upsert: true,
+          contentType: 'image/jpeg',
+        });
+        const { data } = getSupabase().storage.from('avatars').getPublicUrl(filePath);
+        pictureUri = `${data.publicUrl}?t=${Date.now()}`;
+      } catch {}
     }
-  }, [profile]);
+
+    const updated = { ...profile, pictureUri };
+    setProfile(updated);
+    saveProfile(updated, user?.id);
+  }, [profile, user]);
 
   // Derive workout days Set from stored history for calendar/frequency chart
   const workoutDays = useMemo(

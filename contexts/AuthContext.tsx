@@ -3,6 +3,7 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import { Platform } from 'react-native';
 
 import { getSupabase } from '@/lib/supabase';
+import { fullSyncFromSupabase } from '@/lib/sync';
 
 type AuthState = {
   session: Session | null;
@@ -26,8 +27,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
     });
 
-    const { data: { subscription } } = getSupabase().auth.onAuthStateChange((_event, s) => {
+    const { data: { subscription } } = getSupabase().auth.onAuthStateChange((event, s) => {
       setSession(s);
+      if (s?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
+        fullSyncFromSupabase(s.user.id);
+      }
     });
 
     return () => subscription.unsubscribe();
