@@ -18,6 +18,7 @@ import { Colors } from '@/constants/theme';
 import { EXERCISE_LIBRARY, ExerciseInfo, PREV_PERFORMANCE, WorkoutLog } from '@/constants/mockData';
 import { addWorkoutPoints, loadRoutines, loadSchedule, loadWorkoutHistory, saveWorkoutLog } from '@/constants/storage';
 import { calculateWorkoutPoints, computeCurrentStreak, WorkoutPointsEntry } from '@/constants/points';
+import { useAuth } from '@/contexts/AuthContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -60,6 +61,7 @@ function makeSet(): WorkoutSet {
 
 export default function LogScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const { routineId } = useLocalSearchParams<{ routineId?: string }>();
 
   const [elapsed, setElapsed] = useState(0);
@@ -238,7 +240,7 @@ export default function LogScreen() {
       isScheduledToday,
     });
 
-    await addWorkoutPoints(points);
+    await addWorkoutPoints(points, user?.id);
 
     // Save the workout to history so charts and history screen show real data
     const workoutLog: WorkoutLog = {
@@ -257,7 +259,7 @@ export default function LogScreen() {
         }))
         .filter((ex) => ex.sets.length > 0),
     };
-    await saveWorkoutLog(workoutLog);
+    await saveWorkoutLog(workoutLog, user?.id);
 
     setPendingPoints(points);
     setSummaryVisible(true);

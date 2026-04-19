@@ -1,4 +1,4 @@
-import { DarkTheme, ThemeProvider } from '@react-navigation/native';
+import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
@@ -65,7 +65,7 @@ function RootNavigator() {
         <Stack.Screen name="memories" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style="dark" />
-    </ThemeProvider>
+    </>
   );
 }
 

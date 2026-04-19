@@ -6,6 +6,13 @@ import {
   DEFAULT_POINTS_HISTORY,
   DEFAULT_TOTAL_POINTS,
 } from './points';
+import {
+  syncProfileToSupabase,
+  syncRoutinesToSupabase,
+  syncScheduleToSupabase,
+  syncPointsToSupabase,
+  syncWorkoutLogToSupabase,
+} from '@/lib/sync';
 
 // ─── Profile ─────────────────────────────────────────────────────────────────
 
@@ -21,11 +28,11 @@ export type ProfileData = {
 const PROFILE_KEY = '@workout_tracker:profile';
 
 const DEFAULT_PROFILE: ProfileData = {
-  name: 'Liam',
+  name: '',
   goal: 'Build Muscle',
-  age: '22',
-  weight: '175',
-  height: `5'11"`,
+  age: '',
+  weight: '',
+  height: '',
   pictureUri: null,
 };
 
@@ -39,44 +46,43 @@ export async function loadProfile(): Promise<ProfileData> {
   }
 }
 
-export async function saveProfile(profile: ProfileData): Promise<void> {
+export async function saveProfile(profile: ProfileData, userId?: string): Promise<void> {
   await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+  if (userId) syncProfileToSupabase(userId, profile);
 }
 
 // ─── Schedule ─────────────────────────────────────────────────────────────────
 
 export type ScheduleEntry = {
-  day: string;   // 'Monday' … 'Sunday'
-  routineId: string | null; // null = rest day
+  day: string;
+  routineId: string | null;
 };
 
 const SCHEDULE_KEY = '@workout_tracker:schedule';
 
 const DEFAULT_SCHEDULE: ScheduleEntry[] = [
-  { day: 'Monday',    routineId: 'r1' },
-  { day: 'Tuesday',   routineId: 'r2' },
+  { day: 'Monday',    routineId: null },
+  { day: 'Tuesday',   routineId: null },
   { day: 'Wednesday', routineId: null },
-  { day: 'Thursday',  routineId: 'r3' },
-  { day: 'Friday',    routineId: 'r1' },
-  { day: 'Saturday',  routineId: 'r4' },
+  { day: 'Thursday',  routineId: null },
+  { day: 'Friday',    routineId: null },
+  { day: 'Saturday',  routineId: null },
   { day: 'Sunday',    routineId: null },
 ];
 
 export async function loadSchedule(): Promise<ScheduleEntry[]> {
   try {
     const raw = await AsyncStorage.getItem(SCHEDULE_KEY);
-    if (raw === null) {
-      await AsyncStorage.setItem(SCHEDULE_KEY, JSON.stringify(DEFAULT_SCHEDULE));
-      return DEFAULT_SCHEDULE;
-    }
+    if (raw === null) return DEFAULT_SCHEDULE;
     return JSON.parse(raw) as ScheduleEntry[];
   } catch {
     return DEFAULT_SCHEDULE;
   }
 }
 
-export async function saveSchedule(schedule: ScheduleEntry[]): Promise<void> {
+export async function saveSchedule(schedule: ScheduleEntry[], userId?: string): Promise<void> {
   await AsyncStorage.setItem(SCHEDULE_KEY, JSON.stringify(schedule));
+  if (userId) syncScheduleToSupabase(userId, schedule);
 }
 
 // ─── Points ───────────────────────────────────────────────────────────────────
@@ -84,106 +90,89 @@ export async function saveSchedule(schedule: ScheduleEntry[]): Promise<void> {
 const POINTS_KEY = '@workout_tracker:points';
 
 const DEFAULT_POINTS: PointsStore = {
-  totalPoints: DEFAULT_TOTAL_POINTS,
-  history: DEFAULT_POINTS_HISTORY,
+  totalPoints: 0,
+  history: [],
 };
 
 export async function loadPoints(): Promise<PointsStore> {
   try {
     const raw = await AsyncStorage.getItem(POINTS_KEY);
-    if (raw === null) {
-      await AsyncStorage.setItem(POINTS_KEY, JSON.stringify(DEFAULT_POINTS));
-      return DEFAULT_POINTS;
-    }
+    if (raw === null) return DEFAULT_POINTS;
     return JSON.parse(raw) as PointsStore;
   } catch {
     return DEFAULT_POINTS;
   }
 }
 
-export async function savePoints(store: PointsStore): Promise<void> {
+export async function savePoints(store: PointsStore, userId?: string): Promise<void> {
   await AsyncStorage.setItem(POINTS_KEY, JSON.stringify(store));
+  if (userId) syncPointsToSupabase(userId, store.totalPoints, store.history);
 }
 
-export async function addWorkoutPoints(entry: WorkoutPointsEntry): Promise<void> {
+export async function addWorkoutPoints(entry: WorkoutPointsEntry, userId?: string): Promise<void> {
   const store = await loadPoints();
-  // Avoid duplicate entries for the same workoutId
   const filtered = store.history.filter((e) => e.workoutId !== entry.workoutId);
   const updated: PointsStore = {
     totalPoints: filtered.reduce((s, e) => s + e.total, 0) + entry.total,
     history: [...filtered, entry].sort((a, b) => a.date.localeCompare(b.date)),
   };
-  await savePoints(updated);
+  await savePoints(updated, userId);
 }
+
+// ─── Routines ────────────────────────────────────────────────────────────────
 
 const ROUTINES_KEY = '@workout_tracker:routines';
 
-/**
- * Load routines from AsyncStorage.
- * First launch: seeds from ROUTINES mock data.
- */
 export async function loadRoutines(): Promise<Routine[]> {
   try {
     const raw = await AsyncStorage.getItem(ROUTINES_KEY);
-    if (raw === null) {
-      await AsyncStorage.setItem(ROUTINES_KEY, JSON.stringify(ROUTINES));
-      return ROUTINES;
-    }
+    if (raw === null) return [];
     return JSON.parse(raw) as Routine[];
   } catch {
-    return ROUTINES;
+    return [];
   }
 }
 
-/** Persist the full routines array. */
-export async function saveRoutines(routines: Routine[]): Promise<void> {
+export async function saveRoutines(routines: Routine[], userId?: string): Promise<void> {
   await AsyncStorage.setItem(ROUTINES_KEY, JSON.stringify(routines));
+  if (userId) syncRoutinesToSupabase(userId, routines);
 }
 
-/** Insert a new routine or replace an existing one by id. */
-export async function upsertRoutine(routine: Routine): Promise<void> {
+export async function upsertRoutine(routine: Routine, userId?: string): Promise<void> {
   const existing = await loadRoutines();
   const idx = existing.findIndex((r) => r.id === routine.id);
   const updated =
     idx >= 0
       ? existing.map((r) => (r.id === routine.id ? routine : r))
       : [...existing, routine];
-  await saveRoutines(updated);
+  await saveRoutines(updated, userId);
 }
 
-/** Remove a routine by id. */
-export async function deleteRoutine(id: string): Promise<void> {
+export async function deleteRoutine(id: string, userId?: string): Promise<void> {
   const existing = await loadRoutines();
-  await saveRoutines(existing.filter((r) => r.id !== id));
+  await saveRoutines(existing.filter((r) => r.id !== id), userId);
 }
 
 // ─── Workout History ──────────────────────────────────────────────────────────
 
 const WORKOUT_HISTORY_KEY = '@workout_tracker:workout_history';
 
-/**
- * Load workout history from AsyncStorage.
- * First launch: seeds from WORKOUT_HISTORY mock data.
- */
 export async function loadWorkoutHistory(): Promise<WorkoutLog[]> {
   try {
     const raw = await AsyncStorage.getItem(WORKOUT_HISTORY_KEY);
-    if (raw === null) {
-      await AsyncStorage.setItem(WORKOUT_HISTORY_KEY, JSON.stringify(WORKOUT_HISTORY));
-      return WORKOUT_HISTORY;
-    }
+    if (raw === null) return [];
     return JSON.parse(raw) as WorkoutLog[];
   } catch {
-    return WORKOUT_HISTORY;
+    return [];
   }
 }
 
-/** Append (or replace) a completed workout in storage. */
-export async function saveWorkoutLog(log: WorkoutLog): Promise<void> {
+export async function saveWorkoutLog(log: WorkoutLog, userId?: string): Promise<void> {
   const existing = await loadWorkoutHistory();
   const filtered = existing.filter((w) => w.id !== log.id);
   await AsyncStorage.setItem(
     WORKOUT_HISTORY_KEY,
     JSON.stringify([...filtered, log])
   );
+  if (userId) syncWorkoutLogToSupabase(userId, log);
 }
