@@ -1,4 +1,4 @@
-import { DarkTheme, ThemeProvider } from '@react-navigation/native';
+import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
@@ -7,16 +7,16 @@ export const unstable_settings = {
   anchor: '(tabs)',
 };
 
-// Force the custom dark theme (deep black + red accent) globally
+// Light theme — red, black, white
 const AppTheme = {
-  ...DarkTheme,
+  ...DefaultTheme,
   colors: {
-    ...DarkTheme.colors,
-    background: '#1a1a1a',
-    card: '#111111',
-    border: '#333333',
+    ...DefaultTheme.colors,
+    background: '#FFFFFF',
+    card: '#FFFFFF',
+    border: '#E0E0E0',
     primary: '#E53935',
-    text: '#FFFFFF',
+    text: '#000000',
     notification: '#E53935',
   },
 };
@@ -34,7 +34,7 @@ export default function RootLayout() {
         <Stack.Screen name="routine/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="memories" options={{ headerShown: false }} />
       </Stack>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
     </ThemeProvider>
   );
 }

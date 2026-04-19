@@ -1,11 +1,11 @@
 import { Platform } from 'react-native';
 
-// Dark theme only — forced app-wide
+// Light theme — red, black, white
 export const Colors = {
-  background: '#1a1a1a',
-  surface: '#242424',
-  surfaceElevated: '#2e2e2e',
-  border: '#333333',
+  background: '#FFFFFF',
+  surface: '#F5F5F5',
+  surfaceElevated: '#FFFFFF',
+  border: '#E0E0E0',
 
   // Red accent
   accent: '#E53935',
@@ -13,33 +13,33 @@ export const Colors = {
   accentLight: '#EF5350',
 
   // Text
-  textPrimary: '#FFFFFF',
-  textSecondary: '#9CA3AF',
-  textMuted: '#6B7280',
+  textPrimary: '#000000',
+  textSecondary: '#444444',
+  textMuted: '#888888',
 
   // Status
   success: '#22C55E',
 
   // Tab bar
-  tabBar: '#111111',
-  tabIconDefault: '#6B7280',
+  tabBar: '#FFFFFF',
+  tabIconDefault: '#888888',
   tabIconSelected: '#E53935',
 
   // Legacy shape required by expo-router (light/dark keys)
   light: {
-    text: '#FFFFFF',
-    background: '#1a1a1a',
+    text: '#000000',
+    background: '#FFFFFF',
     tint: '#E53935',
-    icon: '#9CA3AF',
-    tabIconDefault: '#6B7280',
+    icon: '#444444',
+    tabIconDefault: '#888888',
     tabIconSelected: '#E53935',
   },
   dark: {
-    text: '#FFFFFF',
-    background: '#1a1a1a',
+    text: '#000000',
+    background: '#FFFFFF',
     tint: '#E53935',
-    icon: '#9CA3AF',
-    tabIconDefault: '#6B7280',
+    icon: '#444444',
+    tabIconDefault: '#888888',
     tabIconSelected: '#E53935',
   },
 };
