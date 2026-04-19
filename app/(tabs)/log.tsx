@@ -16,7 +16,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Colors } from '@/constants/theme';
 import { EXERCISE_LIBRARY, ExerciseInfo, PREV_PERFORMANCE, WorkoutLog } from '@/constants/mockData';
-import { addWorkoutPoints, loadRoutines, loadSchedule, loadWorkoutHistory, saveWorkoutLog } from '@/constants/storage';
+import { addWorkoutPoints, loadRoutines, loadSchedule, loadStreakMeta, loadWorkoutHistory, saveStreakMeta, saveWorkoutLog } from '@/constants/storage';
 import { calculateWorkoutPoints, computeCurrentStreak, WorkoutPointsEntry } from '@/constants/points';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -202,17 +202,23 @@ export default function LogScreen() {
   const [pendingPoints, setPendingPoints] = useState<WorkoutPointsEntry | null>(null);
   const [summaryVisible, setSummaryVisible] = useState(false);
 
+  const [saving, setSaving] = useState(false);
+
   async function handleFinish() {
+    if (saving) return;
+    setSaving(true);
     const today = new Date();
+    const finishTimestamp = today.toISOString();
     const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
     // Load prior history for streak + improvement detection (before saving this workout)
-    const [priorHistory, schedule] = await Promise.all([
+    const [priorHistory, schedule, streakMeta] = await Promise.all([
       loadWorkoutHistory(),
       loadSchedule(),
+      loadStreakMeta(),
     ]);
     const historyDays = new Set(priorHistory.map((w) => w.date));
-    const streak = computeCurrentStreak(historyDays);
+    const streak = computeCurrentStreak(historyDays, streakMeta.lastWorkoutTimestamp);
 
     const dayName = today.toLocaleDateString('en-US', { weekday: 'long' });
     const todayEntry = schedule.find((e) => e.day === dayName);
@@ -260,6 +266,7 @@ export default function LogScreen() {
         .filter((ex) => ex.sets.length > 0),
     };
     await saveWorkoutLog(workoutLog, user?.id);
+    await saveStreakMeta({ lastWorkoutTimestamp: finishTimestamp }, user?.id);
 
     setPendingPoints(points);
     setSummaryVisible(true);

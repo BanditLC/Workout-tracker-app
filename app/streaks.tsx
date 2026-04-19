@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useMemo } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Colors } from '@/constants/theme';
-import { WORKOUT_DAYS } from '@/constants/mockData';
+import { loadWorkoutHistory, loadStreakMeta } from '@/constants/storage';
+import { computeCurrentStreak, computeBestStreak } from '@/constants/points';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -20,9 +21,7 @@ type StreakRun = {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const CURRENT_STREAK = 12;
-const BEST_STREAK = 21;
-const YEAR = 2026;
+const YEAR = new Date().getFullYear();
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -49,7 +48,7 @@ function buildCalendarGrid(year: number, month: number): (number | null)[][] {
 
 /**
  * Compute streak periods from workout days.
- * A gap of ≤ 2 calendar days (i.e. one rest day) keeps a streak alive.
+ * Strict consecutive calendar days only — no gap tolerance.
  */
 function computeStreakRuns(workoutDays: Set<string>): StreakRun[] {
   const sorted = Array.from(workoutDays)
@@ -64,9 +63,9 @@ function computeStreakRuns(workoutDays: Set<string>): StreakRun[] {
   let count = 1;
 
   for (let i = 1; i < sorted.length; i++) {
-    const diff =
-      (sorted[i].getTime() - sorted[i - 1].getTime()) / (1000 * 60 * 60 * 24);
-    if (diff <= 2) {
+    const diff = Math.round(
+      (sorted[i].getTime() - sorted[i - 1].getTime()) / (1000 * 60 * 60 * 24));
+    if (diff === 1) {
       end = sorted[i];
       count++;
     } else {
@@ -106,13 +105,14 @@ function getDayType(
   month: number,
   day: number,
   periods: Array<{ startMs: number; endMs: number }>,
-  today: Date
+  today: Date,
+  workoutDays: Set<string>
 ): DayType {
   const date = new Date(year, month, day);
   if (date > today) return 'future';
 
   const key = dateKey(year, month, day);
-  if (WORKOUT_DAYS.has(key)) return 'workout';
+  if (workoutDays.has(key)) return 'workout';
 
   const ms = date.getTime();
   const inPeriod = periods.some((p) => ms >= p.startMs && ms <= p.endMs);
@@ -126,11 +126,13 @@ function MonthCalendar({
   month,
   periods,
   today,
+  workoutDays,
 }: {
   year: number;
   month: number;
   periods: Array<{ startMs: number; endMs: number }>;
   today: Date;
+  workoutDays: Set<string>;
 }) {
   const weeks = useMemo(() => buildCalendarGrid(year, month), [year, month]);
 
@@ -142,10 +144,10 @@ function MonthCalendar({
     let n = 0;
     const days = new Date(year, month + 1, 0).getDate();
     for (let d = 1; d <= days; d++) {
-      if (WORKOUT_DAYS.has(dateKey(year, month, d))) n++;
+      if (workoutDays.has(dateKey(year, month, d))) n++;
     }
     return n;
-  }, [year, month, today]);
+  }, [year, month, today, workoutDays]);
 
   const isFutureMonth =
     year > today.getFullYear() ||
@@ -175,7 +177,7 @@ function MonthCalendar({
           {week.map((day, di) => {
             if (!day) return <View key={di} style={styles.dayCell} />;
 
-            const type = getDayType(year, month, day, periods, today);
+            const type = getDayType(year, month, day, periods, today, workoutDays);
             const isToday =
               year === today.getFullYear() &&
               month === today.getMonth() &&
@@ -219,12 +221,25 @@ function MonthCalendar({
 export default function StreaksScreen() {
   const router = useRouter();
   const today = useMemo(() => new Date(), []);
+  const [workoutDays, setWorkoutDays] = useState<Set<string>>(new Set());
+  const [currentStreak, setCurrentStreak] = useState(0);
+  const [bestStreak, setBestStreak] = useState(0);
 
-  const streakRuns = useMemo(() => computeStreakRuns(WORKOUT_DAYS), []);
+  useFocusEffect(
+    useCallback(() => {
+      Promise.all([loadWorkoutHistory(), loadStreakMeta()]).then(([history, meta]) => {
+        const days = new Set(history.map((w) => w.date));
+        setWorkoutDays(days);
+        setCurrentStreak(computeCurrentStreak(days, meta.lastWorkoutTimestamp));
+        setBestStreak(computeBestStreak(days));
+      });
+    }, [])
+  );
 
-  // Pre-compute period start/end as ms for fast day-type lookup
+  const streakRuns = useMemo(() => computeStreakRuns(workoutDays), [workoutDays]);
+
   const periods = useMemo(() => {
-    const sorted = Array.from(WORKOUT_DAYS)
+    const sorted = Array.from(workoutDays)
       .sort()
       .map((d) => new Date(d + 'T12:00:00'));
     if (sorted.length === 0) return [];
@@ -234,9 +249,9 @@ export default function StreaksScreen() {
     let end = sorted[0];
 
     for (let i = 1; i < sorted.length; i++) {
-      const diff =
-        (sorted[i].getTime() - sorted[i - 1].getTime()) / (1000 * 60 * 60 * 24);
-      if (diff <= 2) {
+      const diff = Math.round(
+        (sorted[i].getTime() - sorted[i - 1].getTime()) / (1000 * 60 * 60 * 24));
+      if (diff === 1) {
         end = sorted[i];
       } else {
         result.push({ startMs: start.getTime(), endMs: end.getTime() });
@@ -246,7 +261,7 @@ export default function StreaksScreen() {
     }
     result.push({ startMs: start.getTime(), endMs: end.getTime() });
     return result;
-  }, []);
+  }, [workoutDays]);
 
   const months = useMemo(
     () => Array.from({ length: 12 }, (_, i) => i),
@@ -278,7 +293,7 @@ export default function StreaksScreen() {
             <View>
               <Text style={styles.heroLabel}>Current Streak</Text>
               <Text style={styles.heroCount}>
-                {CURRENT_STREAK}
+                {currentStreak}
                 <Text style={styles.heroUnit}> days</Text>
               </Text>
             </View>
@@ -287,7 +302,7 @@ export default function StreaksScreen() {
           <View style={styles.heroRight}>
             <Text style={styles.bestLabel}>Best Streak</Text>
             <Text style={styles.bestCount}>
-              {BEST_STREAK}
+              {bestStreak}
               <Text style={styles.bestUnit}> days</Text>
             </Text>
           </View>
@@ -343,6 +358,7 @@ export default function StreaksScreen() {
             month={month}
             periods={periods}
             today={today}
+            workoutDays={workoutDays}
           />
         ))}
       </ScrollView>

@@ -176,3 +176,25 @@ export async function saveWorkoutLog(log: WorkoutLog, userId?: string): Promise<
   );
   if (userId) syncWorkoutLogToSupabase(userId, log);
 }
+
+// ─── Streak Meta ─────────────────────────────────────────────────────────────
+
+export type StreakMeta = {
+  lastWorkoutTimestamp: string | null;
+};
+
+const STREAK_META_KEY = '@workout_tracker:streak_meta';
+
+export async function loadStreakMeta(): Promise<StreakMeta> {
+  try {
+    const raw = await AsyncStorage.getItem(STREAK_META_KEY);
+    if (raw === null) return { lastWorkoutTimestamp: null };
+    return JSON.parse(raw) as StreakMeta;
+  } catch {
+    return { lastWorkoutTimestamp: null };
+  }
+}
+
+export async function saveStreakMeta(meta: StreakMeta, _userId?: string): Promise<void> {
+  await AsyncStorage.setItem(STREAK_META_KEY, JSON.stringify(meta));
+}
