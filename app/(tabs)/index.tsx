@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/theme';
 import { WORKOUT_DAYS, ROUTINES, Routine } from '@/constants/mockData';
 import { loadRoutines, loadPoints, loadProfile } from '@/constants/storage';
+import { useAuth } from '@/contexts/AuthContext';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -187,6 +188,7 @@ function RoutineCard({ routine }: { routine: Routine }) {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const [routines, setRoutines] = useState<Routine[]>(ROUTINES);
   const [totalPoints, setTotalPoints] = useState(0);
   const [pictureUri, setPictureUri] = useState<string | null>(null);
@@ -196,7 +198,7 @@ export default function HomeScreen() {
       loadRoutines().then(setRoutines);
       loadPoints().then((p) => setTotalPoints(p.totalPoints));
       loadProfile().then((p) => setPictureUri(p.pictureUri));
-    }, [])
+    }, [user?.id])
   );
 
   const hour = new Date().getHours();
