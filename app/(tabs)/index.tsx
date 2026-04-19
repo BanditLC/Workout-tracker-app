@@ -1,12 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Colors } from '@/constants/theme';
 import { WORKOUT_DAYS, ROUTINES, Routine } from '@/constants/mockData';
 import { loadRoutines, loadPoints, loadProfile } from '@/constants/storage';
+import { useAuth } from '@/contexts/AuthContext';
+import { getSupabase } from '@/lib/supabase';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -187,16 +189,39 @@ function RoutineCard({ routine }: { routine: Routine }) {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const [routines, setRoutines] = useState<Routine[]>(ROUTINES);
   const [totalPoints, setTotalPoints] = useState(0);
   const [pictureUri, setPictureUri] = useState<string | null>(null);
+
+  const fetchAvatar = useCallback(async () => {
+    if (!user?.id) {
+      setPictureUri(null);
+      return;
+    }
+    const filePath = `${user.id}/profile.jpg`;
+    const { data: files } = await getSupabase().storage.from('avatars').list(user.id, { limit: 1, search: 'profile.jpg' });
+    if (files && files.length > 0) {
+      const { data } = getSupabase().storage.from('avatars').getPublicUrl(filePath);
+      setPictureUri(`${data.publicUrl}?t=${Date.now()}`);
+    } else {
+      setPictureUri(null);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    setPictureUri(null);
+    loadRoutines().then(setRoutines);
+    loadPoints().then((p) => setTotalPoints(p.totalPoints));
+    fetchAvatar();
+  }, [user?.id, fetchAvatar]);
 
   useFocusEffect(
     useCallback(() => {
       loadRoutines().then(setRoutines);
       loadPoints().then((p) => setTotalPoints(p.totalPoints));
-      loadProfile().then((p) => setPictureUri(p.pictureUri));
-    }, [])
+      fetchAvatar();
+    }, [user?.id])
   );
 
   const hour = new Date().getHours();

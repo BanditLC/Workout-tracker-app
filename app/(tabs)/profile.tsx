@@ -585,13 +585,16 @@ export default function ProfileScreen() {
         const response = await fetch(localUri);
         const blob = await response.blob();
         const filePath = `${user.id}/profile.jpg`;
-        await getSupabase().storage.from('avatars').upload(filePath, blob, {
+        const { error: uploadError } = await getSupabase().storage.from('avatars').upload(filePath, blob, {
           upsert: true,
           contentType: 'image/jpeg',
         });
+        if (uploadError) throw uploadError;
         const { data } = getSupabase().storage.from('avatars').getPublicUrl(filePath);
         pictureUri = `${data.publicUrl}?t=${Date.now()}`;
-      } catch {}
+      } catch (err) {
+        console.error('Avatar upload failed:', err);
+      }
     }
 
     const updated = { ...profile, pictureUri };
