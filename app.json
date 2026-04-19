@@ -35,8 +35,15 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#ffffff"
           }
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Allow Workout Tracker to take profile photos.",
+          "photosPermission": "Allow Workout Tracker to choose a profile photo."
         }
       ]
     ],

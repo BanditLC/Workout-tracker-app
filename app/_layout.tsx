@@ -12,15 +12,16 @@ export const unstable_settings = {
   anchor: '(tabs)',
 };
 
+// Light theme — red, black, white
 const AppTheme = {
-  ...DarkTheme,
+  ...DefaultTheme,
   colors: {
-    ...DarkTheme.colors,
-    background: '#1a1a1a',
-    card: '#111111',
-    border: '#333333',
+    ...DefaultTheme.colors,
+    background: '#FFFFFF',
+    card: '#FFFFFF',
+    border: '#E0E0E0',
     primary: '#E53935',
-    text: '#FFFFFF',
+    text: '#000000',
     notification: '#E53935',
   },
 };
@@ -63,17 +64,7 @@ function RootNavigator() {
         <Stack.Screen name="routine/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="memories" options={{ headerShown: false }} />
       </Stack>
-      <StatusBar style="light" />
-    </>
-  );
-}
-
-export default function RootLayout() {
-  return (
-    <ThemeProvider value={AppTheme}>
-      <AuthProvider>
-        <RootNavigator />
-      </AuthProvider>
+      <StatusBar style="dark" />
     </ThemeProvider>
   );
 }
