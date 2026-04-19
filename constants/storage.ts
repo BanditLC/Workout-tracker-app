@@ -7,6 +7,42 @@ import {
   DEFAULT_TOTAL_POINTS,
 } from './points';
 
+// ─── Profile ─────────────────────────────────────────────────────────────────
+
+export type ProfileData = {
+  name: string;
+  goal: string;
+  age: string;
+  weight: string;
+  height: string;
+  pictureUri: string | null;
+};
+
+const PROFILE_KEY = '@workout_tracker:profile';
+
+const DEFAULT_PROFILE: ProfileData = {
+  name: 'Liam',
+  goal: 'Build Muscle',
+  age: '22',
+  weight: '175',
+  height: `5'11"`,
+  pictureUri: null,
+};
+
+export async function loadProfile(): Promise<ProfileData> {
+  try {
+    const raw = await AsyncStorage.getItem(PROFILE_KEY);
+    if (raw === null) return DEFAULT_PROFILE;
+    return { ...DEFAULT_PROFILE, ...JSON.parse(raw) };
+  } catch {
+    return DEFAULT_PROFILE;
+  }
+}
+
+export async function saveProfile(profile: ProfileData): Promise<void> {
+  await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+}
+
 // ─── Schedule ─────────────────────────────────────────────────────────────────
 
 export type ScheduleEntry = {

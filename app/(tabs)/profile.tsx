@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -16,7 +18,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Colors } from '@/constants/theme';
 import { WorkoutLog } from '@/constants/mockData';
-import { loadPoints, loadWorkoutHistory } from '@/constants/storage';
+import { loadPoints, loadWorkoutHistory, loadProfile, saveProfile } from '@/constants/storage';
+import type { ProfileData } from '@/constants/storage';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -399,13 +402,7 @@ const GOAL_OPTIONS = [
   'Athletic Performance',
 ];
 
-type ProfileData = {
-  name: string;
-  goal: string;
-  age: string;
-  weight: string;
-  height: string;
-};
+type ProfileFormData = Omit<ProfileData, 'pictureUri'>;
 
 function EditProfileModal({
   visible,
@@ -414,17 +411,17 @@ function EditProfileModal({
   onClose,
 }: {
   visible: boolean;
-  initial: ProfileData;
-  onSave: (data: ProfileData) => void;
+  initial: ProfileFormData;
+  onSave: (data: ProfileFormData) => void;
   onClose: () => void;
 }) {
-  const [draft, setDraft] = useState<ProfileData>(initial);
+  const [draft, setDraft] = useState<ProfileFormData>(initial);
 
   React.useEffect(() => {
     if (visible) setDraft(initial);
   }, [visible]);
 
-  function set(field: keyof ProfileData, value: string) {
+  function set(field: keyof ProfileFormData, value: string) {
     setDraft((prev) => ({ ...prev, [field]: value }));
   }
 
@@ -515,6 +512,22 @@ function EditProfileModal({
 
 // ─── Profile Screen ───────────────────────────────────────────────────────────
 
+async function pickImage(source: 'camera' | 'library'): Promise<string | null> {
+  const launch = source === 'camera'
+    ? ImagePicker.launchCameraAsync
+    : ImagePicker.launchImageLibraryAsync;
+
+  const result = await launch({
+    mediaTypes: ['images'],
+    allowsEditing: true,
+    aspect: [1, 1],
+    quality: 0.8,
+  });
+
+  if (result.canceled || result.assets.length === 0) return null;
+  return result.assets[0].uri;
+}
+
 export default function ProfileScreen() {
   const router = useRouter();
   const today = useMemo(() => new Date(), []);
@@ -525,19 +538,47 @@ export default function ProfileScreen() {
     age: '22',
     weight: '175',
     height: `5'11"`,
+    pictureUri: null,
   });
   const [editVisible, setEditVisible] = useState(false);
+  const [pickerVisible, setPickerVisible] = useState(false);
   const [totalPoints, setTotalPoints] = useState(0);
   const [workoutHistory, setWorkoutHistory] = useState<WorkoutLog[]>([]);
 
   useFocusEffect(
     useCallback(() => {
-      Promise.all([loadPoints(), loadWorkoutHistory()]).then(([pts, history]) => {
-        setTotalPoints(pts.totalPoints);
-        setWorkoutHistory(history);
-      });
+      Promise.all([loadPoints(), loadWorkoutHistory(), loadProfile()]).then(
+        ([pts, history, savedProfile]) => {
+          setTotalPoints(pts.totalPoints);
+          setWorkoutHistory(history);
+          setProfile(savedProfile);
+        }
+      );
     }, [])
   );
+
+  const handleProfileSave = useCallback((formData: ProfileFormData) => {
+    const updated = { ...profile, ...formData };
+    setProfile(updated);
+    saveProfile(updated);
+    setEditVisible(false);
+  }, [profile]);
+
+  const updatePicture = useCallback(async (source: 'camera' | 'library' | 'remove') => {
+    setPickerVisible(false);
+    if (source === 'remove') {
+      const updated = { ...profile, pictureUri: null };
+      setProfile(updated);
+      saveProfile(updated);
+      return;
+    }
+    const uri = await pickImage(source);
+    if (uri) {
+      const updated = { ...profile, pictureUri: uri };
+      setProfile(updated);
+      saveProfile(updated);
+    }
+  }, [profile]);
 
   // Derive workout days Set from stored history for calendar/frequency chart
   const workoutDays = useMemo(
@@ -580,9 +621,13 @@ export default function ProfileScreen() {
         <View style={styles.profileHeader}>
           <View style={styles.avatarWrap}>
             <View style={styles.avatar}>
-              <Ionicons name="person" size={40} color={Colors.textSecondary} />
+              {profile.pictureUri ? (
+                <Image source={{ uri: profile.pictureUri }} style={styles.avatarImage} />
+              ) : (
+                <Ionicons name="person" size={40} color={Colors.textSecondary} />
+              )}
             </View>
-            <TouchableOpacity style={styles.avatarEditBtn} onPress={() => setEditVisible(true)}>
+            <TouchableOpacity style={styles.avatarEditBtn} onPress={() => setPickerVisible(true)}>
               <Ionicons name="camera" size={12} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -678,10 +723,44 @@ export default function ProfileScreen() {
 
       </ScrollView>
 
+      <Modal visible={pickerVisible} animationType="fade" transparent>
+        <TouchableOpacity
+          style={styles.overlay}
+          activeOpacity={1}
+          onPress={() => setPickerVisible(false)}
+        >
+          <View style={styles.actionSheet}>
+            <Text style={styles.actionSheetTitle}>Profile Photo</Text>
+            {Platform.OS !== 'web' && (
+              <TouchableOpacity style={styles.actionSheetBtn} onPress={() => updatePicture('camera')}>
+                <Ionicons name="camera-outline" size={20} color={Colors.textPrimary} />
+                <Text style={styles.actionSheetBtnText}>Take Photo</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.actionSheetBtn} onPress={() => updatePicture('library')}>
+              <Ionicons name="images-outline" size={20} color={Colors.textPrimary} />
+              <Text style={styles.actionSheetBtnText}>Choose from Library</Text>
+            </TouchableOpacity>
+            {profile.pictureUri && (
+              <TouchableOpacity style={styles.actionSheetBtn} onPress={() => updatePicture('remove')}>
+                <Ionicons name="trash-outline" size={20} color={Colors.accent} />
+                <Text style={[styles.actionSheetBtnText, { color: Colors.accent }]}>Remove Photo</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={[styles.actionSheetBtn, styles.actionSheetCancel]}
+              onPress={() => setPickerVisible(false)}
+            >
+              <Text style={[styles.actionSheetBtnText, { textAlign: 'center' }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       <EditProfileModal
         visible={editVisible}
         initial={profile}
-        onSave={(data) => { setProfile(data); setEditVisible(false); }}
+        onSave={handleProfileSave}
         onClose={() => setEditVisible(false)}
       />
     </SafeAreaView>
@@ -720,6 +799,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 3,
     borderColor: Colors.accent,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
   },
   avatarEditBtn: {
     position: 'absolute',
@@ -1034,6 +1119,42 @@ const styles = StyleSheet.create({
   menuSub: {
     fontSize: 11,
     color: Colors.textMuted,
+  },
+
+  // ── Photo picker action sheet
+  actionSheet: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  actionSheetTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  actionSheetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  actionSheetBtnText: {
+    fontSize: 15,
+    color: Colors.textPrimary,
+    fontWeight: '500',
+  },
+  actionSheetCancel: {
+    justifyContent: 'center',
+    borderBottomWidth: 0,
   },
 
   // ── Edit modal
