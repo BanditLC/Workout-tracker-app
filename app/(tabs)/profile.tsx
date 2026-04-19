@@ -530,10 +530,11 @@ async function pickImage(source: 'camera' | 'library'): Promise<string | null> {
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { user, signOut } = useAuth();
   const today = useMemo(() => new Date(), []);
 
   const [profile, setProfile] = useState<ProfileData>({
-    name: 'Liam',
+    name: (user?.user_metadata?.name as string) ?? '',
     goal: 'Build Muscle',
     age: '22',
     weight: '175',
@@ -610,6 +611,14 @@ export default function ProfileScreen() {
       label: 'Settings',
       sub: 'Preferences & account',
       route: null,
+      onPress: null,
+    },
+    {
+      icon: 'log-out-outline' as const,
+      label: 'Sign Out',
+      sub: user?.email ?? '',
+      route: null,
+      onPress: signOut,
     },
   ];
 
@@ -704,8 +713,11 @@ export default function ProfileScreen() {
             <TouchableOpacity
               key={i}
               style={[styles.menuItem, i > 0 && styles.menuBorder]}
-              onPress={() => item.route && router.push(item.route)}
-              activeOpacity={item.route ? 0.7 : 1}
+              onPress={() => {
+                if (item.onPress) item.onPress();
+                else if (item.route) router.push(item.route);
+              }}
+              activeOpacity={item.route || item.onPress ? 0.7 : 1}
             >
               <View style={styles.menuIconBox}>
                 <Ionicons name={item.icon} size={18} color={Colors.accent} />
