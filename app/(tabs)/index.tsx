@@ -1,12 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Colors } from '@/constants/theme';
 import { WORKOUT_DAYS, ROUTINES, Routine } from '@/constants/mockData';
-import { loadRoutines, loadPoints } from '@/constants/storage';
+import { loadRoutines, loadPoints, loadProfile } from '@/constants/storage';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -189,11 +189,13 @@ export default function HomeScreen() {
   const router = useRouter();
   const [routines, setRoutines] = useState<Routine[]>(ROUTINES);
   const [totalPoints, setTotalPoints] = useState(0);
+  const [pictureUri, setPictureUri] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       loadRoutines().then(setRoutines);
       loadPoints().then((p) => setTotalPoints(p.totalPoints));
+      loadProfile().then((p) => setPictureUri(p.pictureUri));
     }, [])
   );
 
@@ -213,12 +215,16 @@ export default function HomeScreen() {
             <Text style={styles.greeting}>{greeting}</Text>
             <Text style={styles.headerTitle}>Ready to grind?</Text>
           </View>
-          <TouchableOpacity style={styles.avatarButton}>
-            <Ionicons
-              name="person-circle-outline"
-              size={38}
-              color={Colors.textSecondary}
-            />
+          <TouchableOpacity style={styles.avatarButton} onPress={() => router.push('/(tabs)/profile')}>
+            {pictureUri ? (
+              <Image source={{ uri: pictureUri }} style={styles.avatarImage} />
+            ) : (
+              <Ionicons
+                name="person-circle-outline"
+                size={38}
+                color={Colors.textSecondary}
+              />
+            )}
           </TouchableOpacity>
         </View>
 
@@ -458,6 +464,11 @@ const styles = StyleSheet.create({
   },
   avatarButton: {
     padding: 4,
+  },
+  avatarImage: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
   },
 
   // Streak card

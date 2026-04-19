@@ -69,6 +69,16 @@ function RootNavigator() {
   );
 }
 
+export default function RootLayout() {
+  return (
+    <ThemeProvider value={AppTheme}>
+      <AuthProvider>
+        <RootNavigator />
+      </AuthProvider>
+    </ThemeProvider>
+  );
+}
+
 const styles = StyleSheet.create({
   loading: {
     flex: 1,
