@@ -2,13 +2,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSupabase } from './supabase';
 import type { Routine, WorkoutLog } from '@/constants/mockData';
 import type { WorkoutPointsEntry } from '@/constants/points';
-import type { ProfileData, ScheduleEntry } from '@/constants/storage';
+import type { ProfileData, ScheduleEntry, StreakMeta } from '@/constants/storage';
 
 const PROFILE_KEY = '@workout_tracker:profile';
 const SCHEDULE_KEY = '@workout_tracker:schedule';
 const POINTS_KEY = '@workout_tracker:points';
 const ROUTINES_KEY = '@workout_tracker:routines';
 const WORKOUT_HISTORY_KEY = '@workout_tracker:workout_history';
+const STREAK_META_KEY = '@workout_tracker:streak_meta';
 
 // ─── Profile ─────────────────────────────────────────────────────────────────
 
@@ -253,15 +254,44 @@ export async function fetchPointsFromSupabase(
   }
 }
 
+// ─── Streak Meta ────────────────────────────────────────────────────────────
+
+export async function syncStreakMetaToSupabase(userId: string, meta: StreakMeta) {
+  try {
+    await getSupabase().from('streak_meta').upsert({
+      user_id: userId,
+      last_workout_timestamp: meta.lastWorkoutTimestamp,
+      updated_at: new Date().toISOString(),
+    });
+  } catch {}
+}
+
+export async function fetchStreakMetaFromSupabase(userId: string): Promise<StreakMeta | null> {
+  try {
+    const { data } = await getSupabase()
+      .from('streak_meta')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+    if (!data) return null;
+    return {
+      lastWorkoutTimestamp: data.last_workout_timestamp,
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ─── Full Sync (pull from Supabase → AsyncStorage) ──────────────────────────
 
 export async function fullSyncFromSupabase(userId: string): Promise<void> {
-  const [profile, routines, schedule, history, points] = await Promise.all([
+  const [profile, routines, schedule, history, points, streakMeta] = await Promise.all([
     fetchProfileFromSupabase(userId),
     fetchRoutinesFromSupabase(userId),
     fetchScheduleFromSupabase(userId),
     fetchWorkoutHistoryFromSupabase(userId),
     fetchPointsFromSupabase(userId),
+    fetchStreakMetaFromSupabase(userId),
   ]);
 
   const writes: Promise<void>[] = [];
@@ -281,6 +311,9 @@ export async function fullSyncFromSupabase(userId: string): Promise<void> {
   if (points) {
     writes.push(AsyncStorage.setItem(POINTS_KEY, JSON.stringify(points)));
   }
+  if (streakMeta) {
+    writes.push(AsyncStorage.setItem(STREAK_META_KEY, JSON.stringify(streakMeta)));
+  }
 
   await Promise.all(writes);
 }
@@ -288,12 +321,13 @@ export async function fullSyncFromSupabase(userId: string): Promise<void> {
 // ─── Push local data to Supabase (one-time migration) ────────────────────────
 
 export async function pushLocalDataToSupabase(userId: string): Promise<void> {
-  const [profileRaw, routinesRaw, scheduleRaw, historyRaw, pointsRaw] = await Promise.all([
+  const [profileRaw, routinesRaw, scheduleRaw, historyRaw, pointsRaw, streakMetaRaw] = await Promise.all([
     AsyncStorage.getItem(PROFILE_KEY),
     AsyncStorage.getItem(ROUTINES_KEY),
     AsyncStorage.getItem(SCHEDULE_KEY),
     AsyncStorage.getItem(WORKOUT_HISTORY_KEY),
     AsyncStorage.getItem(POINTS_KEY),
+    AsyncStorage.getItem(STREAK_META_KEY),
   ]);
 
   const ops: Promise<unknown>[] = [];
@@ -317,6 +351,10 @@ export async function pushLocalDataToSupabase(userId: string): Promise<void> {
   if (pointsRaw) {
     const points = JSON.parse(pointsRaw) as { totalPoints: number; history: WorkoutPointsEntry[] };
     ops.push(syncPointsToSupabase(userId, points.totalPoints, points.history));
+  }
+  if (streakMetaRaw) {
+    const streakMeta = JSON.parse(streakMetaRaw) as StreakMeta;
+    ops.push(syncStreakMetaToSupabase(userId, streakMeta));
   }
 
   await Promise.all(ops);

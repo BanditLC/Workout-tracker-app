@@ -12,6 +12,7 @@ import {
   syncScheduleToSupabase,
   syncPointsToSupabase,
   syncWorkoutLogToSupabase,
+  syncStreakMetaToSupabase,
 } from '@/lib/sync';
 
 // ─── Profile ─────────────────────────────────────────────────────────────────
@@ -195,6 +196,7 @@ export async function loadStreakMeta(): Promise<StreakMeta> {
   }
 }
 
-export async function saveStreakMeta(meta: StreakMeta, _userId?: string): Promise<void> {
+export async function saveStreakMeta(meta: StreakMeta, userId?: string): Promise<void> {
   await AsyncStorage.setItem(STREAK_META_KEY, JSON.stringify(meta));
+  if (userId) syncStreakMetaToSupabase(userId, meta);
 }
