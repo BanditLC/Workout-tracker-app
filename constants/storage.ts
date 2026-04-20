@@ -15,6 +15,21 @@ import {
   syncStreakMetaToSupabase,
 } from '@/lib/sync';
 
+// ─── Clear all user data on sign-out ─────────────────────────────────────────
+
+const ALL_KEYS = [
+  '@workout_tracker:profile',
+  '@workout_tracker:schedule',
+  '@workout_tracker:points',
+  '@workout_tracker:routines',
+  '@workout_tracker:workout_history',
+  '@workout_tracker:streak_meta',
+];
+
+export async function clearAllStorage(): Promise<void> {
+  await AsyncStorage.multiRemove(ALL_KEYS);
+}
+
 // ─── Profile ─────────────────────────────────────────────────────────────────
 
 export type ProfileData = {
