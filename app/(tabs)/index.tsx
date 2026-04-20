@@ -223,6 +223,10 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
+    setCurrentStreak(0);
+    setWorkoutDays(new Set());
+    setTotalPoints(0);
+    setRoutines([]);
     setPictureUri(null);
     loadData();
     fetchAvatar();
