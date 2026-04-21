@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 
 import { getSupabase } from '@/lib/supabase';
 import { fullSyncFromSupabase } from '@/lib/sync';
+import { clearAllStorage } from '@/constants/storage';
 
 type AuthState = {
   session: Session | null;
@@ -70,6 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    await clearAllStorage();
     await getSupabase().auth.signOut();
   }, []);
 

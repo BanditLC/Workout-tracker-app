@@ -5,14 +5,11 @@ import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Colors } from '@/constants/theme';
-import { WORKOUT_DAYS, ROUTINES, Routine } from '@/constants/mockData';
-import { loadRoutines, loadPoints, loadProfile } from '@/constants/storage';
+import { Routine } from '@/constants/mockData';
+import { loadRoutines, loadPoints, loadProfile, loadWorkoutHistory, loadStreakMeta } from '@/constants/storage';
+import { computeCurrentStreak } from '@/constants/points';
 import { useAuth } from '@/contexts/AuthContext';
 import { getSupabase } from '@/lib/supabase';
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const STREAK = 12;
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -22,7 +19,7 @@ const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 // ─── Streak Calendar ──────────────────────────────────────────────────────────
 
-function StreakCalendar() {
+function StreakCalendar({ workoutDays }: { workoutDays: Set<string> }) {
   const today = new Date();
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
@@ -54,7 +51,7 @@ function StreakCalendar() {
     .filter((d) => {
       if (!d) return false;
       const key = `${viewYear}-${(viewMonth + 1).toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
-      return WORKOUT_DAYS.has(key);
+      return workoutDays.has(key);
     }).length;
 
   return (
@@ -100,7 +97,7 @@ function StreakCalendar() {
             const mm = (viewMonth + 1).toString().padStart(2, '0');
             const dd = day.toString().padStart(2, '0');
             const dateKey = `${viewYear}-${mm}-${dd}`;
-            const hasWorkout = WORKOUT_DAYS.has(dateKey);
+            const hasWorkout = workoutDays.has(dateKey);
             const isToday =
               viewYear === today.getFullYear() &&
               viewMonth === today.getMonth() &&
@@ -190,8 +187,10 @@ function RoutineCard({ routine }: { routine: Routine }) {
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const [routines, setRoutines] = useState<Routine[]>(ROUTINES);
+  const [routines, setRoutines] = useState<Routine[]>([]);
   const [totalPoints, setTotalPoints] = useState(0);
+  const [currentStreak, setCurrentStreak] = useState(0);
+  const [workoutDays, setWorkoutDays] = useState<Set<string>>(new Set());
   const [pictureUri, setPictureUri] = useState<string | null>(null);
 
   const fetchAvatar = useCallback(async () => {
@@ -209,19 +208,35 @@ export default function HomeScreen() {
     }
   }, [user?.id]);
 
+  const loadData = useCallback(async () => {
+    const [routinesData, pointsData, history, streakMeta] = await Promise.all([
+      loadRoutines(),
+      loadPoints(),
+      loadWorkoutHistory(),
+      loadStreakMeta(),
+    ]);
+    setRoutines(routinesData);
+    setTotalPoints(pointsData.totalPoints);
+    const days = new Set(history.map((w) => w.date));
+    setWorkoutDays(days);
+    setCurrentStreak(computeCurrentStreak(days, streakMeta.lastWorkoutTimestamp));
+  }, []);
+
   useEffect(() => {
+    setCurrentStreak(0);
+    setWorkoutDays(new Set());
+    setTotalPoints(0);
+    setRoutines([]);
     setPictureUri(null);
-    loadRoutines().then(setRoutines);
-    loadPoints().then((p) => setTotalPoints(p.totalPoints));
+    loadData();
     fetchAvatar();
-  }, [user?.id, fetchAvatar]);
+  }, [user?.id, fetchAvatar, loadData]);
 
   useFocusEffect(
     useCallback(() => {
-      loadRoutines().then(setRoutines);
-      loadPoints().then((p) => setTotalPoints(p.totalPoints));
+      loadData();
       fetchAvatar();
-    }, [user?.id])
+    }, [user?.id, loadData, fetchAvatar])
   );
 
   const hour = new Date().getHours();
@@ -266,13 +281,15 @@ export default function HomeScreen() {
             <View style={styles.streakTextBlock}>
               <Text style={styles.streakLabel}>Current Streak</Text>
               <Text style={styles.streakCount}>
-                {STREAK} <Text style={styles.streakUnit}>days</Text>
+                {currentStreak} <Text style={styles.streakUnit}>days</Text>
               </Text>
             </View>
           </View>
-          <View style={styles.streakBadge}>
-            <Text style={styles.streakBadgeText}>ON FIRE</Text>
-          </View>
+          {currentStreak > 0 && (
+            <View style={styles.streakBadge}>
+              <Text style={styles.streakBadgeText}>ON FIRE</Text>
+            </View>
+          )}
         </TouchableOpacity>
 
         {/* ── Stats row ───────────────────────────────────────────────── */}
@@ -300,7 +317,7 @@ export default function HomeScreen() {
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Streak Calendar</Text>
         </View>
-        <StreakCalendar />
+        <StreakCalendar workoutDays={workoutDays} />
 
         {/* ── Workouts ─────────────────────────────────────────────────── */}
         <View style={styles.sectionHeader}>

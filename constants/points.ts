@@ -173,37 +173,82 @@ export function calculateWorkoutPoints(input: PointsCalcInput): WorkoutPointsEnt
   };
 }
 
-// ─── Streak helper ────────────────────────────────────────────────────────────
+// ─── Streak helpers ───────────────────────────────────────────────────────────
+
+function dateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 /**
- * Compute the current workout streak as of today (including today's workout
- * being logged right now). Uses WORKOUT_DAYS with a 1-rest-day grace period.
+ * Compute the current workout streak.
+ * Streak resets to 0 if more than 24 hours have passed since lastWorkoutTimestamp.
+ * Counts consecutive calendar days with a workout, no grace period.
  */
-export function computeCurrentStreak(workoutDays: Set<string>): number {
+export function computeCurrentStreak(
+  workoutDays: Set<string>,
+  lastWorkoutTimestamp: string | null
+): number {
+  if (!lastWorkoutTimestamp || workoutDays.size === 0) return 0;
+
+  const lastWorkout = new Date(lastWorkoutTimestamp);
+  const now = new Date();
+  const hoursSinceLast = (now.getTime() - lastWorkout.getTime()) / (1000 * 60 * 60);
+
+  if (hoursSinceLast > 24) return 0;
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  function key(d: Date): string {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  let streak = 0;
+  const check = new Date(today);
+
+  if (workoutDays.has(dateKey(check))) {
+    streak = 1;
+    check.setDate(check.getDate() - 1);
+  } else {
+    check.setDate(check.getDate() - 1);
+    if (!workoutDays.has(dateKey(check))) return 0;
+    streak = 1;
+    check.setDate(check.getDate() - 1);
   }
 
-  let streak = 1; // today counts
-  let gapAllowed = 1;
-  const check = new Date(today);
-  check.setDate(check.getDate() - 1);
-
   for (let i = 0; i < 365; i++) {
-    if (workoutDays.has(key(check))) {
+    if (workoutDays.has(dateKey(check))) {
       streak++;
-      gapAllowed = 1; // reset
-    } else if (gapAllowed > 0) {
-      gapAllowed--;   // burn a gap
     } else {
       break;
     }
     check.setDate(check.getDate() - 1);
   }
+
   return streak;
+}
+
+/**
+ * Compute the longest streak from all workout history.
+ * Strict consecutive calendar days, no gaps allowed.
+ */
+export function computeBestStreak(workoutDays: Set<string>): number {
+  if (workoutDays.size === 0) return 0;
+
+  const sorted = Array.from(workoutDays).sort();
+  let best = 1;
+  let current = 1;
+
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = new Date(sorted[i - 1] + 'T12:00:00');
+    const curr = new Date(sorted[i] + 'T12:00:00');
+    const diffDays = Math.round((curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 1) {
+      current++;
+    } else {
+      current = 1;
+    }
+    best = Math.max(best, current);
+  }
+
+  return best;
 }
 
 // ─── Pre-seeded points history ────────────────────────────────────────────────

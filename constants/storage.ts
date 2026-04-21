@@ -12,7 +12,23 @@ import {
   syncScheduleToSupabase,
   syncPointsToSupabase,
   syncWorkoutLogToSupabase,
+  syncStreakMetaToSupabase,
 } from '@/lib/sync';
+
+// ─── Clear all user data on sign-out ─────────────────────────────────────────
+
+const ALL_KEYS = [
+  '@workout_tracker:profile',
+  '@workout_tracker:schedule',
+  '@workout_tracker:points',
+  '@workout_tracker:routines',
+  '@workout_tracker:workout_history',
+  '@workout_tracker:streak_meta',
+];
+
+export async function clearAllStorage(): Promise<void> {
+  await AsyncStorage.multiRemove(ALL_KEYS);
+}
 
 // ─── Profile ─────────────────────────────────────────────────────────────────
 
@@ -175,4 +191,27 @@ export async function saveWorkoutLog(log: WorkoutLog, userId?: string): Promise<
     JSON.stringify([...filtered, log])
   );
   if (userId) syncWorkoutLogToSupabase(userId, log);
+}
+
+// ─── Streak Meta ─────────────────────────────────────────────────────────────
+
+export type StreakMeta = {
+  lastWorkoutTimestamp: string | null;
+};
+
+const STREAK_META_KEY = '@workout_tracker:streak_meta';
+
+export async function loadStreakMeta(): Promise<StreakMeta> {
+  try {
+    const raw = await AsyncStorage.getItem(STREAK_META_KEY);
+    if (raw === null) return { lastWorkoutTimestamp: null };
+    return JSON.parse(raw) as StreakMeta;
+  } catch {
+    return { lastWorkoutTimestamp: null };
+  }
+}
+
+export async function saveStreakMeta(meta: StreakMeta, userId?: string): Promise<void> {
+  await AsyncStorage.setItem(STREAK_META_KEY, JSON.stringify(meta));
+  if (userId) syncStreakMetaToSupabase(userId, meta);
 }
